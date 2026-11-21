@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "ShelfVault",
+    "slug": "shelfvault",
+    "scheme": "shelfvault",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shelfvault.collection"
+    },
+    "android": {
+      "package": "com.shelfvault.collection"
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
+  }
+}
