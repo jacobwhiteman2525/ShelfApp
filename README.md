@@ -1,4 +1,4 @@
-# ShelfVault v0.1 — Expo / React Native
+# ShelfApp v0.1 — Expo / React Native
 
 An iPhone-friendly prototype of a game library that looks like real shelves. This is a new React Native implementation of the earlier SwiftUI concept; it does not import the SwiftUI code or its on-device saved data.
 
