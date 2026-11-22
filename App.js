@@ -1,66 +1,131 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+  Animated, Image, Keyboard, KeyboardAvoidingView, Modal, Platform,
+  Pressable, SafeAreaView, ScrollView, StatusBar,
+  StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORE_KEY = 'shelfvault.expo.library.v1';
+const WISHLIST_KEY = 'shelfvault.expo.wishlist.v1';
 
 const SWITCH_TITLES = [
-  'Mario Kart 8 Deluxe',
-  'Mario Party Superstars',
-  'Mario + Rabbids Kingdom Battle',
-  'Mario + Rabbids Sparks of Hope',
-  'Mario Strikers: Battle League',
-  'Mario Tennis Aces',
-  'Metroid Dread',
-  'Metroid Prime Remastered',
-  'Minecraft',
-  'Monster Hunter Generations Ultimate',
-  'MySims Cozy Bundle',
-  'New Pokémon Snap',
-  'Ni no Kuni: Wrath of the White Witch',
-  'Nintendo World Championships',
-  'Octopath Traveler',
+  'Mario Kart 8 Deluxe', 'Mario Party Superstars',
+  'Mario + Rabbids Kingdom Battle', 'Mario + Rabbids Sparks of Hope',
+  'Mario Strikers: Battle League', 'Mario Tennis Aces',
+  'Metroid Dread', 'Metroid Prime Remastered', 'Minecraft',
+  'Monster Hunter Generations Ultimate', 'MySims Cozy Bundle',
+  'New Pokémon Snap', 'Ni no Kuni: Wrath of the White Witch',
+  'Nintendo World Championships', 'Octopath Traveler',
   'Paper Mario: The Origami King',
-  'Paper Mario: The Thousand-Year Door',
-  'Persona 5 Royal',
-  'Pikmin 1+2',
-  'Pikmin 3 Deluxe',
-  'Pikmin 4',
-  'Pokémon Brilliant Diamond',
-  'Pokémon Legends: Arceus',
-  "Pokémon: Let's Go, Eevee!",
-  'Pokémon Violet',
-  'Princess Peach: Showtime!',
-  'Ring Fit Adventure',
-  'Rhythm Heaven Groove',
-  'Sonic Mania',
+  'Paper Mario: The Thousand-Year Door', 'Persona 5 Royal',
+  'Pikmin 1+2', 'Pikmin 3 Deluxe', 'Pikmin 4',
+  'Pokémon Brilliant Diamond', 'Pokémon Legends: Arceus',
+  "Pokémon: Let's Go, Eevee!", 'Pokémon Violet',
+  'Princess Peach: Showtime!', 'Ring Fit Adventure',
+  'Rhythm Heaven Groove', 'Sonic Mania',
 ];
 
 const PS4_TITLES = [
   "JoJo's Bizarre Adventure: Eyes of Heaven",
-  'The Witcher 3: Wild Hunt',
-  'Uncharted: The Lost Legacy',
+  'The Witcher 3: Wild Hunt', 'Uncharted: The Lost Legacy',
   "Uncharted 4: A Thief's End",
   'Uncharted: The Nathan Drake Collection',
-  'Tunic',
-  'Until Dawn',
-  "Tom Clancy's The Division",
+  'Tunic', 'Until Dawn', "Tom Clancy's The Division",
   'Tomb Raider: Definitive Edition',
+];
+
+/**
+ * @typedef {Object} GameMetadata
+ * @property {string} title
+ * @property {string} platform
+ * @property {string} [coverUrl]
+ * @property {string} [edition]
+ * @property {string} [description]
+ * @property {string} [releaseDate]
+ * @property {string} [genre]
+ * @property {string} [developer]
+ * @property {string} [publisher]
+ * @property {number} [metacriticScore] Critic score out of 100.
+ * @property {number} [userScore] User score out of 10.
+ * @property {string} [contentRating]
+ * @property {string} [format]
+ */
+
+const METADATA_FIELDS = [
+  ['edition', 'Edition'],
+  ['releaseDate', 'Release date'],
+  ['genre', 'Genre'],
+  ['developer', 'Developer'],
+  ['publisher', 'Publisher'],
+  ['metacriticScore', 'Metacritic critic score', '/100'],
+  ['userScore', 'User score', '/10'],
+  ['contentRating', 'Content rating'],
+  ['format', 'Format'],
+];
+
+/** @type {Array<GameMetadata & { id: string }>} */
+const DISCOVER_GAMES = [
+  ...SWITCH_TITLES.map(title => ({
+    title, platform: 'Nintendo Switch',
+  })),
+  ...PS4_TITLES.map(title => ({
+    title, platform: 'PlayStation 4',
+  })),
+  ...[
+    'The Legend of Zelda: Breath of the Wild',
+    'The Legend of Zelda: Tears of the Kingdom',
+    'Super Mario Odyssey', 'Super Mario Bros. Wonder',
+    'Super Smash Bros. Ultimate', 'Animal Crossing: New Horizons',
+    'Xenoblade Chronicles: Definitive Edition',
+    'Xenoblade Chronicles 2', 'Xenoblade Chronicles 3',
+    'Fire Emblem: Three Houses', 'Astral Chain',
+    'Bayonetta 3', 'Kirby and the Forgotten Land',
+    'Luigi’s Mansion 3', 'Donkey Kong Country: Tropical Freeze',
+  ].map(title => ({ title, platform: 'Nintendo Switch' })),
+  ...[
+    'Bloodborne', 'God of War', 'God of War Ragnarök',
+    'Ghost of Tsushima', 'Horizon Zero Dawn',
+    'Horizon Forbidden West', 'The Last of Us Part II',
+    'Persona 5', 'Final Fantasy VII Remake',
+    'Red Dead Redemption 2', 'Sekiro: Shadows Die Twice',
+    'Elden Ring', 'Resident Evil 2',
+  ].map(title => ({ title, platform: 'PlayStation 4' })),
+  ...[
+    'Astro Bot', 'Demon’s Souls', 'Returnal',
+    'Marvel’s Spider-Man 2', 'Final Fantasy XVI',
+    'Final Fantasy VII Rebirth', 'Ratchet & Clank: Rift Apart',
+    'Stellar Blade', 'Death Stranding 2: On the Beach',
+    'Elden Ring', 'Resident Evil 4',
+  ].map(title => ({ title, platform: 'PlayStation 5' })),
+  ...[
+    'Super Mario 64', 'The Legend of Zelda: Ocarina of Time',
+    'The Legend of Zelda: Majora’s Mask',
+    'Banjo-Kazooie', 'Paper Mario', 'GoldenEye 007',
+  ].map(title => ({ title, platform: 'Nintendo 64' })),
+  ...[
+    'Super Mario Sunshine', 'Metroid Prime',
+    'The Legend of Zelda: The Wind Waker',
+    'The Legend of Zelda: Twilight Princess',
+    'Paper Mario: The Thousand-Year Door',
+    'Luigi’s Mansion', 'Super Smash Bros. Melee',
+  ].map(title => ({ title, platform: 'Nintendo GameCube' })),
+  ...[
+    'The Legend of Zelda: A Link Between Worlds',
+    'Fire Emblem Awakening', 'Pokémon X',
+    'Pokémon Alpha Sapphire', 'Super Mario 3D Land',
+    'Kid Icarus: Uprising', 'Animal Crossing: New Leaf',
+  ].map(title => ({ title, platform: 'Nintendo 3DS' })),
+].map((game, index) => ({
+  ...game,
+  id: `catalog-${index}`,
+}));
+
+const CONSOLES = [
+  'All Consoles', 'Nintendo Switch', 'PlayStation 4',
+  'PlayStation 5', 'Nintendo 64',
+  'Nintendo GameCube', 'Nintendo 3DS',
 ];
 
 const uid = () =>
@@ -68,21 +133,13 @@ const uid = () =>
 
 const seed = () => {
   const a = SWITCH_TITLES.map((title, i) => ({
-    id: `switch-${i}`,
-    title,
-    platform: 'Nintendo Switch',
-    notes: '',
-    owned: true,
+    id: `switch-${i}`, title, platform: 'Nintendo Switch',
+    notes: '', owned: true,
   }));
-
   const b = PS4_TITLES.map((title, i) => ({
-    id: `ps4-${i}`,
-    title,
-    platform: 'PlayStation 4',
-    notes: '',
-    owned: true,
+    id: `ps4-${i}`, title, platform: 'PlayStation 4',
+    notes: '', owned: true,
   }));
-
   return {
     games: [...a, ...b],
     shelves: [
@@ -95,48 +152,69 @@ const seed = () => {
 };
 
 const C = {
-  bg: '#12131a',
-  panel: '#22242f',
-  text: '#f7f6fc',
-  muted: '#b7b5c6',
-  accent: '#a18aff',
-  line: '#393747',
+  bg: '#12131a', panel: '#22242f',
+  text: '#f7f6fc', muted: '#b7b5c6',
+  accent: '#a18aff', line: '#393747',
 };
 
 const platformColor = p =>
-  p === 'Nintendo Switch'
-    ? '#d82732'
-    : p === 'PlayStation 4'
-    ? '#1f4da6'
-    : '#6555a0';
+  p === 'Nintendo Switch' ? '#d82732'
+  : p === 'PlayStation 4' ? '#1f4da6'
+  : p === 'PlayStation 5' ? '#4265c9'
+  : '#6555a0';
 
 const spineColor = game =>
-  game.platform === 'Nintendo Switch'
-    ? '#db2733'
-    : [
-        '#e8d8ac',
-        '#f1ca5b',
-        '#272a33',
-        '#303846',
-        '#ece8df',
-        '#66733d',
-        '#242d42',
-        '#dedede',
-        '#8294a4',
-      ][Math.max(0, Number(game.id.split('-').pop()) || 0) % 9];
+  game.platform === 'Nintendo Switch' ? '#db2733'
+  : [
+    '#e8d8ac', '#f1ca5b', '#272a33',
+    '#303846', '#ece8df', '#66733d',
+    '#242d42', '#dedede', '#8294a4',
+  ][Math.max(0, Number(game.id.split('-').pop()) || 0) % 9];
 
 const labelColor = hex =>
-  ['#e8d8ac', '#f1ca5b', '#ece8df', '#dedede', '#8294a4'].includes(hex)
-    ? '#1e2130'
-    : '#fff';
+  ['#e8d8ac', '#f1ca5b', '#ece8df', '#dedede', '#8294a4']
+    .includes(hex) ? '#1e2130' : '#fff';
 
-function Button({ children, onPress, selected = false, style }) {
+const normalizeGameText = value =>
+  value.normalize('NFKC').trim().replace(/\s+/g, ' ')
+    .replace(/[\u2018\u2019]/g, "'").toLowerCase();
+
+const sameGame = (a, b) =>
+  normalizeGameText(a.title) === normalizeGameText(b.title) &&
+  normalizeGameText(a.platform) === normalizeGameText(b.platform);
+
+const hasMetadata = value =>
+  (typeof value === 'string' && value.trim() !== '') ||
+  Number.isFinite(value);
+
+function resolveMetadata(game) {
+  const catalogGame = DISCOVER_GAMES.find(item => sameGame(item, game));
+  const metadata = { title: game.title, platform: game.platform };
+
+  for (const field of ['coverUrl', 'description', ...METADATA_FIELDS.map(([key]) => key)]) {
+    const value = hasMetadata(game[field]) ? game[field] : catalogGame?.[field];
+    if (hasMetadata(value)) metadata[field] = value;
+  }
+
+  return metadata;
+}
+
+function Button({ children, onPress, selected = false, style, disabled }) {
   return (
     <Pressable
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.button, selected && styles.buttonSelected, style]}
+      style={[
+        styles.button,
+        selected && styles.buttonSelected,
+        disabled && { opacity: 0.45 },
+        style,
+      ]}
     >
-      <Text style={[styles.buttonText, selected && { color: '#fff' }]}>
+      <Text style={[
+        styles.buttonText,
+        selected && { color: '#fff' },
+      ]}>
         {children}
       </Text>
     </Pressable>
@@ -159,29 +237,21 @@ function Spine({ game, onPress, onLongPress, modern }) {
           width: isSwitch ? 27 : 35,
           height: isSwitch ? 146 : 157,
           borderRadius: modern ? 2 : 4,
-          transform: [
-            {
-              rotate: modern
-                ? '0deg'
-                : game.id.length % 3 === 0
-                ? '1deg'
-                : '0deg',
-            },
-          ],
+          transform: [{
+            rotate: modern ? '0deg'
+              : game.id.length % 3 === 0 ? '1deg' : '0deg',
+          }],
         },
       ]}
     >
-      <View
-        style={[
-          styles.spineBrand,
-          { backgroundColor: isSwitch ? '#bd1928' : '#1b4092' },
-        ]}
-      >
+      <View style={[
+        styles.spineBrand,
+        { backgroundColor: isSwitch ? '#bd1928' : '#1b4092' },
+      ]}>
         <Text style={styles.spineBrandText}>
           {isSwitch ? '◉' : 'PS4'}
         </Text>
       </View>
-
       <View style={styles.verticalHolder}>
         <Text
           numberOfLines={1}
@@ -197,7 +267,6 @@ function Spine({ game, onPress, onLongPress, modern }) {
           {game.title.toUpperCase()}
         </Text>
       </View>
-
       <Text style={[styles.spineFoot, { color: labelColor(color) }]}>
         {isSwitch ? 'N' : 'PS'}
       </Text>
@@ -206,14 +275,8 @@ function Spine({ game, onPress, onLongPress, modern }) {
 }
 
 function Shelf({
-  shelf,
-  games,
-  theme,
-  sort,
-  onOpen,
-  onMoveStart,
-  moving,
-  onMoveTo,
+  shelf, games, theme, sort, onOpen,
+  onMoveStart, moving, onMoveTo,
 }) {
   const byId = new Map(games.map(g => [g.id, g]));
   let items = shelf.ids.map(id => byId.get(id)).filter(Boolean);
@@ -221,7 +284,6 @@ function Shelf({
   if (sort === 'az') {
     items = [...items].sort((a, b) => a.title.localeCompare(b.title));
   }
-
   if (sort === 'za') {
     items = [...items].sort((a, b) => b.title.localeCompare(a.title));
   }
@@ -229,24 +291,18 @@ function Shelf({
   const modern = theme === 'modern';
 
   return (
-    <View
-      style={[
-        styles.shelfContainer,
-        { backgroundColor: modern ? '#292c38' : '#33251e' },
-      ]}
-    >
+    <View style={[
+      styles.shelfContainer,
+      { backgroundColor: modern ? '#292c38' : '#33251e' },
+    ]}>
       <View style={styles.shelfHeader}>
         <Text style={styles.shelfTitle}>
-          {shelf.name === 'Nintendo Switch'
-            ? '🔴 '
-            : shelf.name === 'PlayStation 4'
-            ? '🔵 '
-            : '▣ '}
+          {shelf.name === 'Nintendo Switch' ? '🔴 '
+            : shelf.name === 'PlayStation 4' ? '🔵 ' : '▣ '}
           {shelf.name}
         </Text>
         <Text style={styles.count}>{items.length} games</Text>
       </View>
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -259,24 +315,21 @@ function Shelf({
           },
         ]}
       >
-        {items.length ? (
-          items.map(g => (
-            <Spine
-              key={g.id}
-              game={g}
-              modern={modern}
-              onPress={() =>
-                moving ? onMoveTo(shelf.id, g.id) : onOpen(g)
-              }
-              onLongPress={() => onMoveStart(g)}
-            />
-          ))
-        ) : (
+        {items.length ? items.map(g => (
+          <Spine
+            key={g.id}
+            game={g}
+            modern={modern}
+            onPress={() =>
+              moving ? onMoveTo(shelf.id, g.id) : onOpen(g)
+            }
+            onLongPress={() => onMoveStart(g)}
+          />
+        )) : (
           <Text style={{ color: C.muted, padding: 30 }}>
             Empty shelf · add a game from +
           </Text>
         )}
-
         {moving && (
           <Pressable
             onPress={() => onMoveTo(shelf.id, null)}
@@ -286,21 +339,22 @@ function Shelf({
           </Pressable>
         )}
       </ScrollView>
-
-      <View
-        style={[
-          styles.woodLip,
-          {
-            backgroundColor: modern ? '#6c6d7d' : '#aa7a4a',
-            borderBottomColor: modern ? '#4a4c5a' : '#6d482d',
-          },
-        ]}
-      />
+      <View style={[
+        styles.woodLip,
+        {
+          backgroundColor: modern ? '#6c6d7d' : '#aa7a4a',
+          borderBottomColor: modern ? '#4a4c5a' : '#6d482d',
+        },
+      ]} />
     </View>
   );
 }
 
-function Detail({ game, onClose, onSave, onAddToShelf, shelves }) {
+function GameDetail({
+  game, source, onClose, onSave, onAddToShelf, shelves,
+  onAddToWishlist, onRemoveFromWishlist, onAddToCollection,
+}) {
+  const [coverFailed, setCoverFailed] = useState(false);
   const slide = useRef(new Animated.Value(0)).current;
   const [notes, setNotes] = useState(game.notes || '');
   const scrollRef = useRef(null);
@@ -313,17 +367,12 @@ function Detail({ game, onClose, onSave, onAddToShelf, shelves }) {
     }).start();
   }, [slide]);
 
-  const dismissKeyboard = () => Keyboard.dismiss();
-
   return (
     <Modal
-      visible={true}
-      transparent={true}
+      visible
+      transparent
       animationType="fade"
-      onRequestClose={() => {
-        dismissKeyboard();
-        onClose();
-      }}
+      onRequestClose={onClose}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -332,176 +381,165 @@ function Detail({ game, onClose, onSave, onAddToShelf, shelves }) {
         <View style={styles.modalShade}>
           <Pressable
             style={StyleSheet.absoluteFillObject}
-            onPress={dismissKeyboard}
-            accessible={false}
+            onPress={Keyboard.dismiss}
           />
-
           <ScrollView
             ref={scrollRef}
             style={{ width: '100%' }}
             contentContainerStyle={styles.detailScrollContent}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            automaticallyAdjustKeyboardInsets={false}
           >
             <View style={styles.detail}>
               <Pressable
-                onPress={() => {
-                  dismissKeyboard();
-                  onClose();
-                }}
-                style={{
-                  alignSelf: 'flex-end',
-                  padding: 8,
-                }}
+                onPress={onClose}
+                style={{ alignSelf: 'flex-end', padding: 8 }}
               >
                 <Text style={{ color: C.text, fontSize: 22 }}>×</Text>
               </Pressable>
 
-              <Animated.View
-                style={[
-                  styles.case,
-                  {
-                    borderColor: platformColor(game.platform),
-                    transform: [
-                      {
-                        translateY: slide.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [70, 0],
-                        }),
-                      },
-                      {
-                        scale: slide.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.75, 1],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <View
-                  style={{
-                    backgroundColor: platformColor(game.platform),
-                    padding: 7,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: 'white',
-                      fontWeight: 'bold',
-                    }}
-                  >
+              <Animated.View style={[
+                styles.case,
+                {
+                  borderColor: platformColor(game.platform),
+                  transform: [
+                    {
+                      translateY: slide.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [70, 0],
+                      }),
+                    },
+                    {
+                      scale: slide.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.75, 1],
+                      }),
+                    },
+                  ],
+                },
+              ]}>
+                <View style={{
+                  backgroundColor: platformColor(game.platform),
+                  padding: 7,
+                }}>
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>
                     {game.platform}
                   </Text>
                 </View>
-
-                <View
-                  style={{
-                    flex: 1,
-                    justifyContent: 'center',
-                    padding: 15,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 26,
-                      color: '#fff',
-                      fontWeight: '900',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {game.title}
-                  </Text>
-
-                  <Text
-                    style={{
-                      color: C.muted,
-                      textAlign: 'center',
-                      marginTop: 15,
-                    }}
-                  >
-                    Cover placeholder
-                  </Text>
-                </View>
+                {game.coverUrl && !coverFailed ? (
+                  <Image
+                    source={{ uri: game.coverUrl }}
+                    style={{ flex: 1, width: '100%' }}
+                    resizeMode="contain"
+                    accessibilityLabel={'Cover artwork for ' + game.title}
+                    onError={() => setCoverFailed(true)}
+                  />
+                ) : (
+                  <View style={{
+                    flex: 1, justifyContent: 'center', padding: 15,
+                  }}>
+                    <Text style={{
+                      fontSize: 26, color: '#fff',
+                      fontWeight: '900', textAlign: 'center',
+                    }}>
+                      {game.title}
+                    </Text>
+                    <Text style={{
+                      color: C.muted, textAlign: 'center', marginTop: 15,
+                    }}>
+                      Cover unavailable
+                    </Text>
+                  </View>
+                )}
               </Animated.View>
 
               <Text style={styles.detailTitle}>{game.title}</Text>
+              <Text style={styles.subheading}>{game.platform}</Text>
+              {game.description && (
+                <Text style={styles.subheading}>{game.description}</Text>
+              )}
+              {METADATA_FIELDS.map(([field, label, suffix = '']) =>
+                hasMetadata(game[field]) && (
+                  <Text key={field} style={styles.subheading}>
+                    {label}: {game[field]}{suffix}
+                  </Text>
+                )
+              )}
 
-              <Text style={styles.subheading}>
-                {game.platform} · Physical · Owned
-              </Text>
-
-              <Text
-                style={[
-                  styles.subheading,
-                  {
-                    alignSelf: 'flex-start',
-                    marginTop: 12,
-                  },
-                ]}
-              >
-                Notes
-              </Text>
-
-              <TextInput
-                multiline={true}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Add notes about this game..."
-                placeholderTextColor="#888"
-                style={[styles.input, styles.notesInput]}
-                scrollEnabled={true}
-                textAlignVertical="top"
-                returnKeyType="done"
-                blurOnSubmit={true}
-                onFocus={() => {
-                  setTimeout(() => {
-                    scrollRef.current?.scrollToEnd({
-                      animated: true,
-                    });
-                  }, 300);
-                }}
-                onSubmitEditing={dismissKeyboard}
-              />
-
-              <Button
-                onPress={() => {
-                  dismissKeyboard();
-                  onSave(game.id, notes);
-                  onClose();
-                }}
-              >
-                Save notes
-              </Button>
-
-              <Text
-                style={[
-                  styles.subheading,
-                  {
-                    alignSelf: 'flex-start',
-                    marginTop: 12,
-                  },
-                ]}
-              >
-                Add to another shelf
-              </Text>
-
-              <ScrollView
-                horizontal
-                style={{ maxHeight: 48 }}
-                keyboardShouldPersistTaps="handled"
-              >
-                {shelves.map(s => (
-                  <Button
-                    key={s.id}
-                    onPress={() => onAddToShelf(game.id, s.id)}
-                    style={{ marginRight: 7 }}
-                  >
-                    {s.name}
+              {source === 'collection' && (
+                <>
+                  <Text style={styles.subheading}>
+                    Ownership: {game.owned === true ? 'Owned' :
+                      game.owned === false ? 'Not owned' : 'Unavailable'}
+                  </Text>
+                  <Text style={[
+                    styles.subheading,
+                    { alignSelf: 'flex-start', marginTop: 12 },
+                  ]}>
+                    Notes
+                  </Text>
+                  <TextInput
+                    multiline
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Add notes about this game..."
+                    placeholderTextColor="#888"
+                    style={[styles.input, styles.notesInput]}
+                    scrollEnabled
+                    textAlignVertical="top"
+                    returnKeyType="done"
+                    blurOnSubmit
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                  <Button onPress={() => {
+                    Keyboard.dismiss();
+                    onSave(game.id, notes);
+                    onClose();
+                  }}>
+                    Save notes
                   </Button>
-                ))}
-              </ScrollView>
+
+                  <Text style={[
+                    styles.subheading,
+                    { alignSelf: 'flex-start', marginTop: 12 },
+                  ]}>
+                    Add to another shelf
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    style={{ maxHeight: 48 }}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {shelves.map(s => (
+                      <Button
+                        key={s.id}
+                        onPress={() => onAddToShelf(game.id, s.id)}
+                        style={{ marginRight: 7 }}
+                      >
+                        {s.name}
+                      </Button>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              {source !== 'collection' && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {source === 'discover' ? (
+                    <Button selected onPress={onAddToWishlist}>Add to Wishlist</Button>
+                  ) : (
+                    <Button onPress={onRemoveFromWishlist}>Remove from Wishlist</Button>
+                  )}
+                  <Button onPress={onAddToCollection}>
+                    {source === 'wishlist' ? 'Move to Collection' : 'Add to Collection'}
+                  </Button>
+                </View>
+              )}
             </View>
           </ScrollView>
         </View>
@@ -510,8 +548,33 @@ function Detail({ game, onClose, onSave, onAddToShelf, shelves }) {
   );
 }
 
+function GameRow({ game, onPress }) {
+  return (
+    <Pressable accessibilityRole="button" style={styles.gameRow} onPress={onPress}>
+      <View style={[
+        styles.gameCover,
+        { borderColor: platformColor(game.platform) },
+      ]}>
+        <Text style={{ color: '#fff', fontSize: 20 }}>▣</Text>
+      </View>
+      <View style={{ flex: 1, gap: 5 }}>
+        <Text style={{ color: C.text, fontWeight: '700' }}>
+          {game.title}
+        </Text>
+        <Text style={{ color: C.muted, fontSize: 12 }}>
+          {game.platform}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export default function App() {
   const [library, setLibrary] = useState(null);
+  const [wishlist, setWishlist] = useState([]);
+  const [ready, setReady] = useState(false);
+
+  const [tab, setTab] = useState('collection');
   const [view, setView] = useState('shelf');
   const [detail, setDetail] = useState(null);
   const [moving, setMoving] = useState(null);
@@ -519,62 +582,80 @@ export default function App() {
   const [entry, setEntry] = useState('');
   const [platform, setPlatform] = useState('Nintendo Switch');
 
+  const [search, setSearch] = useState('');
+  const [consoleFilter, setConsoleFilter] = useState('All Consoles');
+  const [discoverSort, setDiscoverSort] = useState('az');
+
   useEffect(() => {
+    let active = true;
     (async () => {
+      let savedLibrary = seed();
+      let savedWishlist = [];
+
       try {
-        const saved = await AsyncStorage.getItem(STORE_KEY);
-        setLibrary(saved ? JSON.parse(saved) : seed());
+        const raw = await AsyncStorage.getItem(STORE_KEY);
+        if (raw) savedLibrary = JSON.parse(raw);
       } catch (e) {
-        setLibrary(seed());
+        console.warn('Could not load collection', e);
+      }
+
+      try {
+        const raw = await AsyncStorage.getItem(WISHLIST_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) savedWishlist = parsed;
+        }
+      } catch (e) {
+        console.warn('Could not load wishlist', e);
+      }
+
+      if (active) {
+        setLibrary(savedLibrary);
+        setWishlist(savedWishlist);
+        setReady(true);
       }
     })();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (library) {
-      AsyncStorage.setItem(
-        STORE_KEY,
-        JSON.stringify(library)
-      ).catch(() => {});
+    if (ready && library) {
+      AsyncStorage.multiSet([
+        [STORE_KEY, JSON.stringify(library)],
+        [WISHLIST_KEY, JSON.stringify(wishlist)],
+      ]).catch(console.warn);
     }
-  }, [library]);
+  }, [library, wishlist, ready]);
 
   const update = fn => setLibrary(old => fn(old));
 
   const sortedGames = shelf => {
-    let g = shelf.ids
-      .map(id => library.games.find(x => x.id === id))
+    let games = shelf.ids
+      .map(id => library.games.find(g => g.id === id))
       .filter(Boolean);
 
-    return library.sort === 'az'
-      ? g.sort((a, b) => a.title.localeCompare(b.title))
-      : library.sort === 'za'
-      ? g.sort((a, b) => b.title.localeCompare(a.title))
-      : g;
+    if (library.sort === 'az') {
+      games.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (library.sort === 'za') {
+      games.sort((a, b) => b.title.localeCompare(a.title));
+    }
+    return games;
   };
 
   const moveTo = (shelfId, targetId) => {
     if (!moving) return;
-
     update(l => ({
       ...l,
       sort: 'custom',
       shelves: l.shelves.map(s => {
         if (s.id !== shelfId) return s;
-
-        let ids = s.ids.filter(id => id !== moving.id);
+        const ids = s.ids.filter(id => id !== moving.id);
         const idx = targetId ? ids.indexOf(targetId) : -1;
-
-        if (idx < 0) {
-          ids.push(moving.id);
-        } else {
-          ids.splice(idx, 0, moving.id);
-        }
-
+        if (idx < 0) ids.push(moving.id);
+        else ids.splice(idx, 0, moving.id);
         return { ...s, ids };
       }),
     }));
-
     setMoving(null);
   };
 
@@ -587,6 +668,59 @@ export default function App() {
           : s
       ),
     }));
+
+  const isOwned = game =>
+    library.games.some(g => sameGame(g, game));
+
+  const isWishlisted = game =>
+    wishlist.some(g => sameGame(g, game));
+
+  const addToWishlist = game => {
+    if (isOwned(game)) return;
+
+    setWishlist(old => old.some(g => sameGame(g, game))
+      ? old
+      : [...old, { ...resolveMetadata(game), id: uid() }]
+    );
+  };
+
+  const removeFromWishlist = game =>
+    setWishlist(old => old.filter(g => !sameGame(g, game)));
+
+  const addToCollection = game => {
+    const id = uid();
+    const platformShelfId = uid();
+    const savedGame = wishlist.find(item => sameGame(item, game));
+    const metadata = resolveMetadata({ ...savedGame, ...game });
+    update(l => {
+      if (l.games.some(g => sameGame(g, game))) return l;
+
+      const shelf = l.shelves.find(s =>
+        normalizeGameText(s.name) === normalizeGameText(game.platform)
+      );
+      return {
+        ...l,
+        games: [...l.games, {
+          ...metadata,
+          id,
+          owned: true,
+          notes: '',
+        }],
+        shelves: shelf
+          ? l.shelves.map(s =>
+              s.id === shelf.id
+                ? { ...s, ids: [...s.ids, id] }
+                : s
+            )
+          : [
+              ...l.shelves,
+              { id: platformShelfId, name: game.platform, ids: [id] },
+            ],
+      };
+    });
+
+    removeFromWishlist(game);
+  };
 
   const add = () => {
     const name = entry.trim();
@@ -601,41 +735,13 @@ export default function App() {
         ],
       }));
     } else {
-      const id = uid();
-
-      update(l => {
-        const game = {
-          id,
-          title: name,
-          platform,
-          owned: true,
-          notes: '',
-        };
-
-        const shelf = l.shelves.find(s => s.name === platform);
-
-        return {
-          ...l,
-          games: [...l.games, game],
-          shelves: shelf
-            ? l.shelves.map(s =>
-                s.id === shelf.id
-                  ? { ...s, ids: [...s.ids, id] }
-                  : s
-              )
-            : [
-                ...l.shelves,
-                { id: uid(), name: platform, ids: [id] },
-              ],
-        };
-      });
+      addToCollection({ title: name, platform });
     }
-
     setDialog(null);
     setEntry('');
   };
 
-  if (!library) {
+  if (!ready || !library) {
     return (
       <SafeAreaView style={styles.app}>
         <Text style={styles.heading}>Loading ShelfVault...</Text>
@@ -643,13 +749,36 @@ export default function App() {
     );
   }
 
+  const filteredDiscover = DISCOVER_GAMES.filter(game =>
+    (consoleFilter === 'All Consoles' || game.platform === consoleFilter) &&
+    game.title.toLowerCase().includes(search.trim().toLowerCase()) &&
+    !isOwned(game) &&
+    !isWishlisted(game)
+  ).sort((a, b) =>
+    discoverSort === 'za'
+      ? b.title.localeCompare(a.title)
+      : a.title.localeCompare(b.title)
+  );
+
+  const sortedWishlist = [...wishlist].sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
+
+  const openDetail = game => {
+    Keyboard.dismiss();
+    setDetail({ source: tab, game });
+  };
+
+  const detailGame = detail?.source === 'collection'
+    ? library.games.find(g => g.id === detail.game.id)
+    : detail?.game;
+
   return (
     <SafeAreaView style={styles.app}>
       <StatusBar barStyle="light-content" />
 
       <View style={styles.top}>
         <Text style={styles.heading}>▥ ShelfVault</Text>
-
         <Pressable
           onPress={() => {
             setDialog('game');
@@ -665,166 +794,313 @@ export default function App() {
         Your collection, on your shelves.
       </Text>
 
-      <View style={styles.tabs}>
-        {['shelf', 'grid', 'list'].map(v => (
-          <Button
-            key={v}
-            selected={view === v}
-            onPress={() => {
-              setMoving(null);
-              setView(v);
-            }}
+      {tab === 'collection' && (
+        <>
+          <View style={styles.tabs}>
+            {['shelf', 'grid', 'list'].map(v => (
+              <Button
+                key={v}
+                selected={view === v}
+                onPress={() => {
+                  setMoving(null);
+                  setView(v);
+                }}
+                style={{ flex: 1 }}
+              >
+                {v[0].toUpperCase() + v.slice(1)}
+              </Button>
+            ))}
+          </View>
+
+          <View style={styles.toolbar}>
+            <Button onPress={() =>
+              update(l => ({
+                ...l,
+                theme: l.theme === 'wood' ? 'modern' : 'wood',
+              }))
+            }>
+              {library.theme === 'wood' ? '🪵 Wood' : '▤ Modern'}
+            </Button>
+
+            <Button onPress={() =>
+              update(l => ({
+                ...l,
+                sort: l.sort === 'custom' ? 'az'
+                  : l.sort === 'az' ? 'za' : 'custom',
+              }))
+            }>
+              Sort: {library.sort === 'custom' ? 'Manual'
+                : library.sort === 'az' ? 'A–Z' : 'Z–A'}
+            </Button>
+
+            <Button onPress={() => {
+              setDialog('shelf');
+              setEntry('');
+            }}>
+              + Shelf
+            </Button>
+          </View>
+
+          {moving && (
+            <View style={styles.moveBanner}>
+              <Text style={{ color: '#fff', flex: 1 }}>
+                Moving: {moving.title}. Tap a spine to insert
+                before it, or + End.
+              </Text>
+              <Button onPress={() => setMoving(null)}>Cancel</Button>
+            </View>
+          )}
+
+          {view === 'shelf' ? (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              {library.shelves.map(s => (
+                <Shelf
+                  key={s.id}
+                  shelf={s}
+                  games={library.games}
+                  theme={library.theme}
+                  sort={library.sort}
+                  onOpen={openDetail}
+                  onMoveStart={setMoving}
+                  moving={moving}
+                  onMoveTo={moveTo}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: 12 }}
+            >
+              {library.shelves.map(s => (
+                <View key={s.id} style={{ marginBottom: 18 }}>
+                  <Text style={styles.shelfTitle}>
+                    {s.name} · {s.ids.length}
+                  </Text>
+                  <View style={view === 'grid' ? styles.grid : {}}>
+                    {sortedGames(s).map(g => (
+                      <Pressable
+                        key={g.id}
+                        onPress={() => openDetail(g)}
+                        onLongPress={() => setMoving(g)}
+                        style={view === 'grid'
+                          ? styles.gridCard : styles.listCard}
+                      >
+                        <View style={{
+                          width: 5,
+                          backgroundColor: platformColor(g.platform),
+                          marginRight: 9,
+                        }} />
+                        <Text
+                          style={{ color: '#fff', flex: 1 }}
+                          numberOfLines={view === 'grid' ? 3 : 1}
+                        >
+                          {g.title}
+                        </Text>
+                        {moving && (
+                          <Text
+                            onPress={() => moveTo(s.id, g.id)}
+                            style={{ color: C.accent }}
+                          >
+                            Move here
+                          </Text>
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </>
+      )}
+
+      {tab === 'wishlist' && (
+        <View style={{ flex: 1 }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>♡ Wishlist</Text>
+            <Text style={styles.subheading}>
+              {wishlist.length} games saved
+            </Text>
+          </View>
+
+          <ScrollView
             style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 12, paddingBottom: 20 }}
           >
-            {v[0].toUpperCase() + v.slice(1)}
-          </Button>
-        ))}
-      </View>
-
-      <View style={styles.toolbar}>
-        <Button
-          onPress={() =>
-            update(l => ({
-              ...l,
-              theme: l.theme === 'wood' ? 'modern' : 'wood',
-            }))
-          }
-        >
-          {library.theme === 'wood' ? '🪵 Wood' : '▤ Modern'}
-        </Button>
-
-        <Button
-          onPress={() =>
-            update(l => ({
-              ...l,
-              sort:
-                l.sort === 'custom'
-                  ? 'az'
-                  : l.sort === 'az'
-                  ? 'za'
-                  : 'custom',
-            }))
-          }
-        >
-          Sort:{' '}
-          {library.sort === 'custom'
-            ? 'Manual'
-            : library.sort === 'az'
-            ? 'A–Z'
-            : 'Z–A'}
-        </Button>
-
-        <Button
-          onPress={() => {
-            setDialog('shelf');
-            setEntry('');
-          }}
-        >
-          + Shelf
-        </Button>
-      </View>
-
-      {moving && (
-        <View style={styles.moveBanner}>
-          <Text style={{ color: '#fff', flex: 1 }}>
-            Moving: {moving.title}. Tap a spine to insert before it,
-            or + End.
-          </Text>
-
-          <Button onPress={() => setMoving(null)}>Cancel</Button>
+            {sortedWishlist.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={{ fontSize: 36 }}>♡</Text>
+                <Text style={styles.emptyTitle}>
+                  Your wishlist is empty
+                </Text>
+                <Text style={styles.emptyDescription}>
+                  Browse games in Discover and save the ones
+                  you'd like to own.
+                </Text>
+                <Button
+                  selected
+                  onPress={() => setTab('discover')}
+                >
+                  Explore games
+                </Button>
+              </View>
+            ) : (
+              sortedWishlist.map(game => (
+                <GameRow
+                  key={game.id}
+                  game={game}
+                  onPress={() => openDetail(game)}
+                />
+              ))
+            )}
+          </ScrollView>
         </View>
       )}
 
-      {view === 'shelf' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: 90 }}>
-          {library.shelves.map(s => (
-            <Shelf
-              key={s.id}
-              shelf={s}
-              games={library.games}
-              theme={library.theme}
-              sort={library.sort}
-              onOpen={setDetail}
-              onMoveStart={setMoving}
-              moving={moving}
-              onMoveTo={moveTo}
+      {tab === 'discover' && (
+        <View style={{ flex: 1 }}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>⌕ Discover</Text>
+            <Text style={styles.subheading}>
+              Explore games by console
+            </Text>
+          </View>
+
+          <View style={{ paddingHorizontal: 12 }}>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search games..."
+              placeholderTextColor="#888"
+              style={styles.input}
+              returnKeyType="search"
             />
-          ))}
-        </ScrollView>
-      ) : (
-        <ScrollView
-          contentContainerStyle={{
-            padding: 12,
-            paddingBottom: 80,
-          }}
-        >
-          {library.shelves.map(s => (
-            <View key={s.id} style={{ marginBottom: 18 }}>
-              <Text style={styles.shelfTitle}>
-                {s.name} · {s.ids.length}
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ marginBottom: 10, flexGrow: 0 }}
+            >
+              {CONSOLES.map(consoleName => (
+                <Button
+                  key={consoleName}
+                  selected={consoleFilter === consoleName}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setConsoleFilter(consoleName);
+                  }}
+                  style={{ marginRight: 7 }}
+                >
+                  {consoleName}
+                </Button>
+              ))}
+            </ScrollView>
+
+            <View style={{
+              flexDirection: 'row',
+              gap: 7,
+              marginBottom: 8,
+              alignItems: 'center',
+            }}>
+              <Text style={{ color: C.muted, fontSize: 12 }}>
+                Sort:
               </Text>
-
-              <View style={view === 'grid' ? styles.grid : {}}>
-                {sortedGames(s).map(g => (
-                  <Pressable
-                    key={g.id}
-                    onPress={() => setDetail(g)}
-                    onLongPress={() => setMoving(g)}
-                    style={
-                      view === 'grid'
-                        ? styles.gridCard
-                        : styles.listCard
-                    }
-                  >
-                    <View
-                      style={{
-                        width: 5,
-                        backgroundColor: platformColor(g.platform),
-                        marginRight: 9,
-                      }}
-                    />
-
-                    <Text
-                      style={{ color: '#fff', flex: 1 }}
-                      numberOfLines={view === 'grid' ? 3 : 1}
-                    >
-                      {g.title}
-                    </Text>
-
-                    {moving && (
-                      <Text
-                        onPress={() => moveTo(s.id, g.id)}
-                        style={{ color: C.accent }}
-                      >
-                        Move here
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
+              <Button
+                selected={discoverSort === 'az'}
+                onPress={() => setDiscoverSort('az')}
+              >
+                A–Z
+              </Button>
+              <Button
+                selected={discoverSort === 'za'}
+                onPress={() => setDiscoverSort('za')}
+              >
+                Z–A
+              </Button>
             </View>
-          ))}
-        </ScrollView>
+
+            <Text style={{ color: C.muted, fontSize: 11, marginBottom: 8 }}>
+              Popularity and review-score rankings coming with
+              the live game database.
+            </Text>
+            <Text style={{ color: C.muted, fontSize: 12 }}>
+              {filteredDiscover.length} catalog results
+            </Text>
+          </View>
+
+          <ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{
+              padding: 12,
+              paddingBottom: 20,
+            }}
+          >
+            {filteredDiscover.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>
+                  No games found
+                </Text>
+                <Text style={styles.emptyDescription}>
+                  Try another title or console.
+                  This version uses a limited starter catalog.
+                </Text>
+              </View>
+            ) : (
+              filteredDiscover.map(game => (
+                <GameRow
+                  key={game.id}
+                  game={game}
+                  onPress={() => openDetail(game)}
+                />
+              ))
+            )}
+          </ScrollView>
+        </View>
       )}
 
       <View style={styles.bottom}>
-        <Text style={styles.bottomActive}>
-          ▥ Collection
-        </Text>
-        <Text style={styles.bottomMuted}>
-          ♡ Wishlist (soon)
-        </Text>
-        <Text style={styles.bottomMuted}>
-          ▤ Stats (soon)
-        </Text>
+        {[
+          ['collection', '▥', 'Collection'],
+          ['wishlist', '♡', 'Wishlist'],
+          ['discover', '⌕', 'Discover'],
+        ].map(([key, symbol, name]) => (
+          <Pressable
+            key={key}
+            onPress={() => {
+              Keyboard.dismiss();
+              setMoving(null);
+              setTab(key);
+            }}
+            style={styles.bottomTab}
+          >
+            <Text style={[
+              styles.bottomIcon,
+              { color: tab === key ? C.accent : C.muted },
+            ]}>
+              {symbol}
+            </Text>
+            <Text style={[
+              styles.bottomText,
+              { color: tab === key ? C.accent : C.muted },
+            ]}>
+              {name}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
-      {detail && (
-        <Detail
-          key={detail.id}
-          game={
-            library.games.find(g => g.id === detail.id) || detail
-          }
+      {detailGame && (
+        <GameDetail
+          key={detail.source + ':' + detailGame.id}
+          source={detail.source}
+          game={{ ...detailGame, ...resolveMetadata(detailGame) }}
           shelves={library.shelves}
           onClose={() => setDetail(null)}
           onSave={(id, notes) =>
@@ -836,6 +1112,18 @@ export default function App() {
             }))
           }
           onAddToShelf={addMembership}
+          onAddToWishlist={() => {
+            addToWishlist(detailGame);
+            setDetail(null);
+          }}
+          onRemoveFromWishlist={() => {
+            removeFromWishlist(detailGame);
+            setDetail(null);
+          }}
+          onAddToCollection={() => {
+            addToCollection(detailGame);
+            setDetail(null);
+          }}
         />
       )}
 
@@ -851,34 +1139,28 @@ export default function App() {
         >
           <View style={styles.addModal}>
             <Text style={styles.detailTitle}>
-              {dialog === 'shelf'
-                ? 'New custom shelf'
-                : 'Add a game'}
+              {dialog === 'shelf' ? 'New custom shelf' : 'Add a game'}
             </Text>
 
             <TextInput
               autoFocus
               value={entry}
               onChangeText={setEntry}
-              placeholder={
-                dialog === 'shelf' ? 'Shelf name' : 'Game title'
-              }
+              placeholder={dialog === 'shelf'
+                ? 'Shelf name' : 'Game title'}
               placeholderTextColor="#888"
               style={styles.input}
             />
 
             {dialog === 'game' && (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  gap: 6,
-                  flexWrap: 'wrap',
-                }}
-              >
+              <View style={{
+                flexDirection: 'row',
+                gap: 6,
+                flexWrap: 'wrap',
+              }}>
                 {[
-                  'Nintendo Switch',
-                  'PlayStation 4',
-                  'Other',
+                  'Nintendo Switch', 'PlayStation 4',
+                  'PlayStation 5', 'Other',
                 ].map(p => (
                   <Button
                     key={p}
@@ -891,13 +1173,11 @@ export default function App() {
               </View>
             )}
 
-            <View
-              style={{
-                flexDirection: 'row',
-                gap: 10,
-                marginTop: 14,
-              }}
-            >
+            <View style={{
+              flexDirection: 'row',
+              gap: 10,
+              marginTop: 14,
+            }}>
               <Button onPress={() => setDialog(null)}>
                 Cancel
               </Button>
@@ -1072,26 +1352,74 @@ const styles = StyleSheet.create({
     borderRadius: 7,
   },
   bottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 55,
+    height: 62,
     backgroundColor: '#1d1d27',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
     borderTopColor: C.line,
     borderTopWidth: 1,
   },
-  bottomActive: {
-    color: C.accent,
-    fontSize: 12,
+  bottomTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 6,
+  },
+  bottomIcon: {
+    fontSize: 23,
     fontWeight: 'bold',
   },
-  bottomMuted: {
-    color: C.muted,
+  bottomText: {
     fontSize: 11,
+    fontWeight: '700',
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  sectionTitle: {
+    color: C.text,
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  gameRow: {
+    backgroundColor: C.panel,
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 9,
+    alignItems: 'center',
+  },
+  gameCover: {
+    width: 65,
+    height: 88,
+    backgroundColor: '#303141',
+    borderWidth: 3,
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+    gap: 12,
+    marginTop: 40,
+  },
+  emptyTitle: {
+    color: C.text,
+    fontSize: 19,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptyDescription: {
+    color: C.muted,
+    textAlign: 'center',
+    lineHeight: 21,
   },
   modalShade: {
     flex: 1,

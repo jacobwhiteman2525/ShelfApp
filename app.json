@@ -3,7 +3,7 @@
     "name": "ShelfVault",
     "slug": "shelfvault",
     "scheme": "shelfvault",
-    "version": "0.2.0",
+    "version": "0.3.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
