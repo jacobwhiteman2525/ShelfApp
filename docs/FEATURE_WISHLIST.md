@@ -58,9 +58,9 @@ Status: **ideas and candidate features, not commitments or implemented functiona
 2. **v0.4.5** — provider-independent catalog and ownership model design; explicitly reserve Physical/Digital/Both and multiple entitlement records in schema.
 3. **v0.5** — physical barcode/edition identification.
 4. **v0.6** — authentic/generated spine artwork and enhanced physical shelf design.
-5. **Future digital-library milestone (scope/date TBD)** — manual digital entries, distinct digital shelf representation, import/export; Steam integration feasibility and prototype.
-6. **Later integrations** — Steam account sync if authorized, Epic/GOG, then exploratory PlayStation/Xbox/Nintendo based on actual permitted APIs.
-7. **Later community milestone** — social profiles, community metrics and reviews.
+5. **Future digital-library milestone (scope/date TBD)** — manual digital entries, distinct digital shelf representation, and import/export without account connections.
+6. **Community and social milestone** — optional ShelfVault accounts, public shelves and profiles, following, sharing, ShelfVault-native ratings, reviews, community discovery, moderation and privacy controls.
+7. **Later account integrations** — research and, where permitted, build Steam account sync, Epic/GOG imports, then exploratory PlayStation/Xbox/Nintendo connections. No storefront account connections before the community/social milestone.
 
 Digital representation is a **high-priority product goal**, but no storefront account integration is promised until its technical and legal feasibility is verified.
 
