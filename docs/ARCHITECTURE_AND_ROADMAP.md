@@ -52,9 +52,20 @@ Mobile app: local-first physical + digital Collection, Wishlist, shelves, notes 
 3. **Artwork:** `frontCover`, `spine`, `background/promotional` are separate asset roles. Each artwork record has platform, region, edition, provenance, license/usage constraints, dimensions, verification state and optional attribution. A promotional screenshot is NEVER labeled or framed as physical box art.
 4. **Critic scores:** Metacritic critic score remains externally sourced and separately labeled; check rights and attribution. RAWG community rating is not a ShelfVault rating and is not a Metacritic user score.
 5. **Community metrics:** ShelfVault ratings, review counts, collection counts, wishlist counts and trending metrics must eventually derive from ShelfVault activity, with abuse prevention and privacy controls. Do not build these in v0.4.
-6. **Personal data:** collection records, notes, shelf membership/order, wishlist and user edits remain authoritative for the owner. Migration to cloud sync requires opt-in, conflict resolution, backup/export and recovery.\n7. **Ownership records:** model physical copies, digital licenses, and temporary subscription access as distinct holdings linked to a canonical game/release, platform and optional storefront. Support multiple holdings of the same game without conflating them or silently deduplicating them.
+6. **Personal data:** collection records, notes, shelf membership/order, wishlist and user edits remain authoritative for the owner. Migration to cloud sync requires opt-in, conflict resolution, backup/export and recovery.
+7. **Ownership records:** model physical copies, digital licenses, and temporary subscription access as distinct holdings linked to a canonical game/release, platform and optional storefront. Support multiple holdings of the same game without conflating them or silently deduplicating them.
 
-## Future digital-library architecture\n\n**Digital representation is a product priority, not an implemented feature.** The same virtual shelves should eventually display clearly differentiated digital game cases/tiles/spines alongside physical cases, with filters for ownership format, platform and storefront. Manual digital entry should work even without external account access. Physical box art and digital storefront artwork have different roles; do not portray a digital license as a physical copy.\n\n**Storefront connectors are optional adapters, separate from game metadata providers.** A connector may import a user's authorized entitlements into ShelfVault ownership records, while the ShelfVault canonical game ID remains stable. Model `ownershipType` (physical/digital/subscription or other permitted access), `platformId`, `storefrontId`, `externalEntitlementId` where available, access status, source, last-sync time, and user overrides. Keep imports idempotent and distinguish purchased/claimed/installed/played/subscription access; these are not equivalent. Never delete a user's manually maintained record because a provider stops returning it.\n\n**Integration feasibility:** Steam is an early candidate for authorized library import, subject to Steam privacy settings and API/terms. Epic Games Store and GOG require research into supported account-library access; do not assume a public import API exists. PlayStation, Xbox and Nintendo account-library integration is a long-term research goal only: entitlement APIs may be restricted or unavailable to third parties. Do not use credential scraping or request passwords. Connections must be opt-in, revocable, least-privilege and backed by secure server-side token handling when needed. Manual entry and export/import remain fallbacks.\n\nSee [Feature Wishlist](FEATURE_WISHLIST.md) for the digital-library user experience and broader ideas.\n\n## Provider independence
+## Future digital-library architecture
+
+**Digital representation is a product priority, not an implemented feature.** The same virtual shelves should eventually display clearly differentiated digital game cases/tiles/spines alongside physical cases, with filters for ownership format, platform and storefront. Manual digital entry should work even without external account access. Physical box art and digital storefront artwork have different roles; do not portray a digital license as a physical copy.
+
+**Storefront connectors are optional adapters, separate from game metadata providers.** A connector may import a user's authorized entitlements into ShelfVault ownership records, while the ShelfVault canonical game ID remains stable. Model `ownershipType` (physical/digital/subscription or other permitted access), `platformId`, `storefrontId`, `externalEntitlementId` where available, access status, source, last-sync time, and user overrides. Keep imports idempotent and distinguish purchased/claimed/installed/played/subscription access; these are not equivalent. Never delete a user's manually maintained record because a provider stops returning it.
+
+**Integration feasibility:** Steam is an early candidate for authorized library import, subject to Steam privacy settings and API/terms. Epic Games Store and GOG require research into supported account-library access; do not assume a public import API exists. PlayStation, Xbox and Nintendo account-library integration is a long-term research goal only: entitlement APIs may be restricted or unavailable to third parties. Do not use credential scraping or request passwords. Connections must be opt-in, revocable, least-privilege and backed by secure server-side token handling when needed. Manual entry and export/import remain fallbacks.
+
+See [Feature Wishlist](FEATURE_WISHLIST.md) for the digital-library user experience and broader ideas.
+
+## Provider independence
 
 Use provider adapter interfaces (search, detail, platforms, artwork, score, source metadata) and a normalized domain model. Keep raw provider IDs separate from canonical IDs. Reconcile using title aliases, platform, release date, edition and region, with a confidence threshold and human confirmation for ambiguous matches. Avoid fuzzy matching that conflates remasters, compilations, ports or editions. Cache permitted results with TTL and offline fallback. A provider outage should degrade enrichment, not break saved collections. Do not bulk-republish or permanently mirror restricted provider data without permission. Confirm each source's terms before deployment or redistribution.
 
@@ -87,7 +98,8 @@ Default discovery sections: Popular, New Releases, Upcoming, Top Rated, with liv
 - Validate Expo Go proxy/network behavior, old data migration and offline states.
 
 ### v0.4.5 — Independence architecture
-- Specify canonical game/release/platform/edition IDs, provider crosswalk, provenance, artwork roles and content policy.\n- Reserve schema support for multiple physical/digital ownership records, storefront mappings, and temporary subscription access without building account sync yet.
+- Specify canonical game/release/platform/edition IDs, provider crosswalk, provenance, artwork roles and content policy.
+- Reserve schema support for multiple physical/digital ownership records, storefront mappings, and temporary subscription access without building account sync yet.
 - Introduce provider-agnostic interfaces and migration plan from provider-linked local records.
 - Evaluate licensing and hosting economics; choose future persistent catalog/backend only after a technical design review.
 - Preserve AsyncStorage keys and provide tested migration/rollback/export plan.
@@ -103,10 +115,21 @@ Default discovery sections: Popular, New Releases, Upcoming, Top Rated, with liv
 - Artwork overrides, edition/region customization, improved shelf layouts and organization.
 - Export/backup and further collection management improvements as scoped.
 
-### Future — Digital shelves and account-library integration (scope TBD)\n- First, manual digital ownership records and clearly differentiated digital cases/spines; support Physical/Digital/All filters and multiple ownership formats for one title.\n- Research authorized Steam library import as a first account integration, with explicit privacy/permission and import-deduplication design.\n- Explore Epic Games Store and GOG only where supported account-library access exists.\n- Treat PlayStation, Xbox and Nintendo account connections as long-term feasibility research, not guaranteed features.\n- Keep local-first use, manual entry, and revocable opt-in connections.\n\n### Later — ShelfVault community
-- Accounts, optional cloud sync, public collections, profiles, follows, ratings, reviews and moderation.
-- Native popularity, trending, most-owned and most-wishlisted rankings.
-- Privacy, safety, moderation, anti-spam, content preference and data portability design before launch.
+### Future — Digital shelves (without account connections)
+- Add manual digital ownership records and clearly differentiated digital cases/spines, with Physical/Digital/All filters and multiple ownership formats per title.
+- Support local-first digital entries and optional export/import without requiring a Steam, Epic, console, or other external account.
+
+### Next — ShelfVault community and social features
+- Introduce optional ShelfVault accounts, optional cloud sync, public collections, profiles, follows, sharing, ratings, reviews and moderation.
+- Build ShelfVault-native popularity, trending, most-owned and most-wishlisted rankings from consented community activity.
+- Establish privacy, safety, moderation, anti-spam, content preferences and data portability before launch.
+- **Ship community and social capabilities before implementing external storefront or console account connections.**
+
+### Later — External account and game-library integrations
+- Research authorized Steam library import first, with explicit privacy/permission and import-deduplication design.
+- Explore Epic Games Store and GOG only where supported account-library access exists.
+- Treat PlayStation, Xbox and Nintendo account connections as long-term feasibility research, not guaranteed features.
+- Keep local-first use, manual entry, and revocable opt-in connections.
 
 ## Engineering guardrails
 
