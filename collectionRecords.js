@@ -1,4 +1,4 @@
-const { fillMetadata, normalizeGameText, sameGame } = require('./discovery/model');
+const { fillMetadata, linkMetadata, normalizeGameText, sameGame, selectPlatform } = require('./discovery/model');
 
 function readSavedRecords(collection, wishlist, seed) {
   const library = collection === null ? seed() : JSON.parse(collection);
@@ -40,4 +40,22 @@ function collectGame(library, game, wish, newId, shelfId) {
   };
 }
 
-module.exports = { readSavedRecords, savedGame, collectGame };
+function linkSavedGame(games, otherGames, id, candidate, platform) {
+  const record = games.find(game => game.id === id);
+  if (!record || record.providerId) return games;
+  const linked = linkMetadata(record, candidate, platform);
+  const providerGame = selectPlatform(candidate, platform);
+  const matches = game => sameGame(game, linked) || sameGame(game, providerGame);
+  if (games.some(game => game.id !== id && matches(game)) || otherGames.some(matches)) return games;
+  return games.map(game => game === record ? linked : game);
+}
+
+function enrichSavedGame(games, id, details) {
+  const record = games.find(game => game.id === id);
+  if (!record || record.provider !== details.provider || record.providerId !== details.providerId) return games;
+  const enriched = fillMetadata(record, details);
+  if (Object.keys(enriched).every(key => enriched[key] === record[key])) return games;
+  return games.map(game => game === record ? enriched : game);
+}
+
+module.exports = { readSavedRecords, savedGame, collectGame, linkSavedGame, enrichSavedGame };

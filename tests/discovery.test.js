@@ -6,13 +6,78 @@ const {
 } = require('../discovery/model');
 const { gameQuery } = require('../discovery/queries');
 const { createCache, CACHE_KEY } = require('../discovery/cache');
-const { readSavedRecords, collectGame } = require('../collectionRecords');
+const { readSavedRecords, collectGame, linkSavedGame, enrichSavedGame } = require('../collectionRecords');
+const { findSavedMatch } = require('../discovery/savedMatch');
 const { createProxy } = require('../server/rawg-proxy');
 const { classifyExplicit, discoveryIntent, permitsGame } = require('../discovery/contentPolicy');
 const { createCoverLookup, selectFrontCover } = require('../server/cover-art');
+const { coverLookupTitle, fitsPortraitSlot, frontCoverUrl } = require('../discovery/coverPolicy');
 
 const switchPlatform = { id: 7, name: 'Nintendo Switch' };
 const pcPlatform = { id: 4, name: 'PC' };
+
+test('saved lookup accepts one platform-matched title, punctuation, and a verified bundle alias', async () => {
+  const saved = { title: 'Pikmin 1+2', platform: 'Nintendo Switch' };
+  const candidate = { providerId: 10, title: 'Pikmin™ 1 & 2 Bundle', platforms: [switchPlatform] };
+  const search = async title => ({ data: { results: title.includes('Bundle') ? [candidate] : [], hasMore: false } });
+  assert.deepEqual(await findSavedMatch(saved, search), {
+    kind: 'match', options: [{ candidate, platform: switchPlatform }],
+  });
+  const regional = { ...candidate, title: 'ピクミン１＋２' };
+  assert.equal((await findSavedMatch(saved, async () => ({
+    data: { results: [regional], hasMore: false },
+  }))).kind, 'match');
+});
+
+test('saved lookup requires confirmation for multiple candidates, incomplete results, or edition conflicts', async () => {
+  const saved = { title: 'Example: Remastered', platform: 'Switch' };
+  const candidate = { providerId: 10, title: 'Example – Remastered', platforms: [switchPlatform] };
+  const find = (results, hasMore = false, entry = saved) =>
+    findSavedMatch(entry, async () => ({ data: { results, hasMore } }));
+  assert.equal((await find([candidate, { ...candidate, providerId: 11 }])).kind, 'confirm');
+  assert.equal((await find([candidate], true)).kind, 'confirm');
+  assert.equal((await find([candidate], false, { ...saved, edition: 'Collector’s Edition' })).kind, 'confirm');
+  assert.equal((await find([{ ...candidate, platforms: [pcPlatform] }])).kind, 'none');
+  assert.equal((await find([{ ...candidate, title: 'Example' }])).kind, 'none');
+  assert.equal((await find([])).kind, 'none');
+});
+
+test('saved lookup handles offline and stops scheduling requests after the detail closes', async () => {
+  const saved = { title: 'Pikmin 1+2', platform: 'Nintendo Switch' };
+  assert.deepEqual(await findSavedMatch(saved, async () => { throw Error('Offline'); }), {
+    kind: 'unavailable', warning: 'Offline',
+  });
+  const candidate = { providerId: 10, title: saved.title, platforms: [switchPlatform] };
+  assert.equal((await findSavedMatch(saved, async () => ({
+    warning: 'Offline', data: { results: [candidate], hasMore: false },
+  }))).kind, 'confirm');
+  let active = true;
+  let calls = 0;
+  await findSavedMatch(saved, async () => {
+    calls += 1;
+    active = false;
+    return { data: { results: [] } };
+  }, () => active);
+  assert.equal(calls, 1);
+});
+
+test('saved links prevent duplicates and persist enrichment without altering personal data', () => {
+  const record = { id: 'mine', title: 'My title', platform: 'Nintendo Switch', notes: 'keep', description: 'Personal' };
+  const candidate = { provider: 'rawg', providerId: 10, title: 'Canonical', platforms: [switchPlatform] };
+  const games = [record];
+  assert.equal(linkSavedGame(games, [{ ...record, title: candidate.title }], record.id, candidate, switchPlatform), games);
+  const linked = linkSavedGame(games, [], record.id, candidate, switchPlatform);
+  assert.equal(linkSavedGame(linked, [], record.id, candidate, switchPlatform), linked);
+  assert.equal(enrichSavedGame(linked, record.id, { ...candidate, providerId: 11 }), linked);
+  const enriched = enrichSavedGame(linked, record.id, { ...candidate, description: 'Provider', rawgRating: 4 });
+  const shelves = [{ id: 'shelf', name: 'My shelf', ids: [record.id] }];
+  const stored = readSavedRecords(JSON.stringify({ games: enriched, shelves, sort: 'custom' }),
+    JSON.stringify(enriched), () => assert.fail());
+  assert.deepEqual(stored.library.shelves, shelves);
+  assert.equal(stored.library.sort, 'custom');
+  assert.deepEqual(stored.library.games[0], { ...record, provider: 'rawg', providerId: 10, platformId: 7, rawgRating: 4 });
+  assert.deepEqual(stored.wishlist, enriched);
+});
 const fixture = {
   id: 100, name: 'Player’s Game', released: '2025-01-01',
   platforms: [switchPlatform, pcPlatform, switchPlatform].map(platform => ({ platform })),
@@ -264,9 +329,51 @@ test('cover lookup requires an unambiguous title and platform, and returns only 
   const cover = await lookup(fixture.name, 'PlayStation 4');
   assert.deepEqual(cover, {
     coverArtUrl: 'https://cdn.thegamesdb.net/images/original/boxart/front/15.jpg',
-    coverArtSource: 'thegamesdb',
+    coverArtSource: 'thegamesdb', coverArtKind: 'physical-front',
+    coverArtTitle: fixture.name, coverArtPlatform: 'PlayStation 4',
   });
+  assert.equal(frontCoverUrl(cover, fixture.name, 'Nintendo Switch'), undefined);
   assert.equal(urls[1].searchParams.get('filter[platform]'), '9');
   assert.ok(!JSON.stringify(cover).includes('fixture-cover-key'));
   assert.equal(await createCoverLookup({})(fixture.name, 'PlayStation 4'), null);
+});
+
+test('physical slots reject promotional, legacy, unverified, and landscape images', () => {
+  const title = 'Banjo-Kazooie';
+  const platform = 'Nintendo 64';
+  const rawgImage = 'https://media.rawg.io/media/screenshot.jpg';
+  const cover = {
+    coverArtKind: 'physical-front', coverArtSource: 'thegamesdb',
+    coverArtTitle: title, coverArtPlatform: platform,
+    coverArtUrl: 'https://cdn.thegamesdb.net/images/original/boxart/front/fixture.jpg',
+  };
+  assert.equal(frontCoverUrl({ coverUrl: rawgImage, backgroundImageUrl: rawgImage }, title, platform), undefined);
+  assert.equal(frontCoverUrl({ coverArtUrl: cover.coverArtUrl }, title, platform), undefined);
+  assert.equal(frontCoverUrl({ ...cover, coverArtUrl: rawgImage }, title, platform), undefined);
+  assert.equal(frontCoverUrl({ ...cover, coverArtUrl: cover.coverArtUrl.replace('boxart/front', 'screenshots') },
+    title, platform), undefined);
+  assert.equal(frontCoverUrl(cover, title, 'Xbox 360'), undefined);
+  assert.equal(frontCoverUrl(cover, title, platform), cover.coverArtUrl);
+  assert.equal(fitsPortraitSlot({ width: 1600, height: 900 }), false);
+  assert.equal(fitsPortraitSlot({ width: 600, height: 600 }), true);
+  assert.equal(fitsPortraitSlot({ width: 600, height: 900 }), true);
+  assert.equal(fitsPortraitSlot({ width: 0, height: 900 }), false);
+  assert.equal(coverLookupTitle({ title: 'Pikmin 1+2', edition: 'Collector’s Edition' }), 'Pikmin 1+2 Collector’s Edition');
+});
+
+test('TheGamesDB cover lookup rejects screenshots and indistinguishable regional records', () => {
+  const title = 'Pikmin 1+2';
+  const row = { id: 100, game_title: title, platform: 7 };
+  const payload = {
+    data: { games: [row] },
+    include: { boxart: {
+      base_url: { original: 'https://cdn.thegamesdb.net/images/original/' },
+      data: { 100: [{ side: 'front', type: 'screenshot', filename: 'boxart/front/fixture.jpg' }] },
+    } },
+  };
+  assert.deepEqual(selectFrontCover(payload, title, 7, 'Nintendo Switch'), {});
+  payload.include.boxart.data[100][0].type = 'boxart';
+  assert.equal(selectFrontCover(payload, title, 7, 'Nintendo Switch').coverArtPlatform, 'Nintendo Switch');
+  payload.data.games.push({ ...row, id: 101, region_id: 2 });
+  assert.deepEqual(selectFrontCover(payload, title, 7, 'Nintendo Switch'), {});
 });

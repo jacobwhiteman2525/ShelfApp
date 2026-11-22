@@ -26,9 +26,13 @@ const { classifyExplicit } = require('./contentPolicy');
 const string = value => typeof value === 'string' ? value.trim() : '';
 const normalizeGameText = value => string(value).normalize('NFKC')
   .replace(/\s+/g, ' ').replace(/[\u2018\u2019]/g, "'").toLowerCase();
+const platformAliases = new Map([
+  ['gamecube', 'nintendo gamecube'], ['switch', 'nintendo switch'],
+  ['ps4', 'playstation 4'], ['ps5', 'playstation 5'],
+]);
 const platformName = value => {
-  const name = normalizeGameText(value);
-  return name === 'gamecube' ? 'nintendo gamecube' : name;
+  const name = normalizeGameText(value).replace(/^sony (?=playstation)/, '');
+  return platformAliases.get(name) || name;
 };
 
 function sameGame(a, b) {
@@ -142,7 +146,8 @@ function linkMetadata(existing, candidate, platform) {
 }
 
 const matchingPlatforms = (candidate, game) => candidate.platforms.filter(platform =>
-  platformName(platform.name) === platformName(game.platform));
+  game.platformId ? platform.id === game.platformId
+    : platformName(platform.name) === platformName(game.platform));
 
 module.exports = {
   normalizeGameText, sameGame, selectPlatform, availablePlatforms, mergePages,

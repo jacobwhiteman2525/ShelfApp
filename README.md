@@ -1,47 +1,82 @@
-# ShelfVault v0.4
+# ShelfVault v0.4.0
 
-See [RAWG setup and iPhone verification](RAWG-SETUP.md) to run the local discovery proxy. The prototype notes below describe the original release.
+ShelfVault is an Expo and React Native app for cataloging physical games on iPhone. Collection has spine-based shelves plus Grid and List views. Wishlist tracks games you want, and Discover uses RAWG for live search, platform filters, release lists, and ratings.
 
-## ShelfApp v0.1 prototype
+## Set up on Windows
 
-An iPhone-friendly prototype of a game library that looks like real shelves. This is a new React Native implementation of the earlier SwiftUI concept; it does not import the SwiftUI code or its on-device saved data.
+### 1. Install and open the project
 
-## Setup on Windows 10
+- Use Node.js **22.13 or later in the 22.x series**, VS Code, and a version of Expo Go that supports **Expo SDK 58** on your iPhone.
+- Open this project folder in VS Code. Run these commands in its terminal.
 
-1. Install **Node.js LTS** from https://nodejs.org/ and **Visual Studio Code** from https://code.visualstudio.com/.
-2. Install **Expo Go** on your iPhone from the App Store.
-3. Extract this ZIP, open the `ShelfVault-Expo` folder in VS Code, and open **Terminal → New Terminal**.
-4. Run `npm install` (internet required).
-5. Run `npx expo start`.
-6. Make sure your iPhone and Windows PC are on the same Wi-Fi network. Scan the terminal's QR code with the iPhone Camera and open it in Expo Go.
-7. If the LAN connection fails, stop the server with Ctrl+C, run `npx expo start --tunnel` (may prompt you to install `@expo/ngrok`), then scan the new QR code.
+```powershell
+node --version
+npm ci
+```
 
-### Notes
-- Expo SDK 54 and its pinned compatible dependencies are configured in `package.json`. Check current Expo Go compatibility if running a different Expo Go version.
-- Run `npx expo install --check` to verify package compatibility after installing.
-- If PowerShell blocks npm scripts, open **Command Prompt** as your VS Code terminal and run the commands there instead.
-- Expo Go is for development/testing; distributing a standalone iOS app requires a separate cloud build and Apple signing.
-- The project does not include copyrighted game artwork. Spines and covers are generated placeholders.
-- No barcode scanning, API game lookup, cloud backup, or valuation yet.
+If PowerShell blocks npm scripts, use `npm.cmd` and `npx.cmd` in PowerShell, or use a Command Prompt terminal.
 
-## Using the app
-- Shelf, Grid, and List toggle at the top.
-- Wood / Modern toggles shelf styling.
-- Sort cycles through Manual → A–Z → Z–A.
-- Tap a game spine to reveal a placeholder case, edit notes, and add it to custom shelves.
-- **Long-press** a spine to select it for moving. Tap a target spine to insert before it, or **+ End** to append. This is a two-step touch-friendly reordering interaction, not freeform drag-and-drop yet.
-- Use **+ Shelf** to create collections; open a game's detail and tap the new shelf name to add membership.
-- **+** adds a game to its platform shelf.
-- Changes save locally using AsyncStorage. Uninstalling the app or clearing Expo Go storage may remove this data.
+### 2. Configure the local proxy
 
-## Architecture
-- `App.js` contains the first prototype UI, seeded games, state and interactions.
-- `AsyncStorage` persists the game records, shelves, theme and sort mode.
-- Each shelf stores a list of game IDs; a game can belong to multiple shelves without duplicate game records.
+Get a personal RAWG API key from the [RAWG API page](https://rawg.io/apidocs). Generate a separate development token with this command.
 
-## Roadmap
-1. Replace the long-press/tap-to-place workflow with true drag-and-drop.
-2. Accurate artwork via licensed/user-supplied spines and cover uploads.
-3. Rich game metadata, search and barcode entry.
-4. Backup/sync, import/export, ownership condition, valuations.
-5. Accessibility, performance and responsive layouts for large collections.
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Create `.env.proxy` in the project root, or update the existing file. Replace the example key and token with your own values.
+
+```dotenv
+RAWG_API_KEY=your_rawg_api_key
+RAWG_PROXY_TOKEN=your_generated_development_token
+RAWG_PROXY_HOST=0.0.0.0
+RAWG_PROXY_PORT=8787
+```
+
+For optional physical front covers, add `THEGAMESDB_API_KEY=your_thegamesdb_api_key` to the same file. The app shows a ShelfVault placeholder when no verified cover is available. RAWG promotional images are stored separately. See the [provider setup and limits](RAWG-SETUP.md#optional-front-covers).
+
+### 3. Point Expo Go at the proxy
+
+Connect the PC and iPhone to the same trusted Wi-Fi network. Run `ipconfig` and find the IPv4 address of the PC’s active network adapter. In the project root, create or update `.env.local`. Replace `192.168.1.50` with that address and use the same development token as above.
+
+```dotenv
+EXPO_PUBLIC_RAWG_PROXY_URL=http://192.168.1.50:8787
+EXPO_PUBLIC_RAWG_PROXY_TOKEN=your_generated_development_token
+```
+
+The Expo bundle includes these two public settings. Keep the RAWG and TheGamesDB API keys exclusively in the backend’s `.env.proxy`. Git ignores `.env*` files.
+
+### 4. Run both services
+
+In one VS Code terminal, start the proxy.
+
+```powershell
+npm run proxy
+```
+
+In a second terminal, start Expo.
+
+```powershell
+npm start -- --lan
+```
+
+Keep both terminals running. Scan the Expo QR code with the iPhone Camera, open it in Expo Go, and allow Local Network access. Open **Discover** to verify the live connection.
+
+## Troubleshoot Expo Go
+
+- **Could not reach the proxy.** Check `ipconfig` for a changed IP address and update `.env.local`. If the proxy is bound to a specific old IP, update `RAWG_PROXY_HOST` too. Restart the proxy and restart Expo with `npm start -- --lan --clear`, then reload on iPhone.
+- **Check whether the phone reaches Windows.** Open `http://YOUR_PC_IP:8787/platforms` in iPhone Safari. **Proxy access denied** (HTTP 401) is expected without the token and confirms the phone reached the proxy. If Safari times out, check the Wi-Fi and Windows Firewall’s Private profile for port 8787.
+- **Using Expo tunnel.** Run `npm run tunnel` in place of the Expo LAN command. It tunnels Metro only. Off-LAN access to the proxy needs a separate private HTTPS route. See the [full connection guide and PowerShell diagnostics](RAWG-SETUP.md#diagnose-the-local-connection).
+
+## Use and verify the app
+
+- **Collection** supports Wood and Modern themes, custom shelves, and Manual, A–Z, and Z–A sorting. In Shelf view, long-press a spine, then tap a target spine or **+ End** to place it.
+- Open a game to see its details. Collection also offers personal Notes and shelf membership. Older Collection and Wishlist entries look up a title and platform match when opened. Ambiguous matches require confirmation.
+- **Discover** offers Popular, New Releases, Upcoming, and Top Rated, with cached browsing and manual entry. Collection and Wishlist are saved locally and remain available when the proxy is offline. Clearing Expo Go’s storage can remove local saves.
+
+```powershell
+npm test
+npx expo install --check
+```
+
+See the [Expo Go verification checklist](RAWG-SETUP.md#verify-in-expo-go) for device checks.

@@ -9,10 +9,10 @@ import { CoverAttribution } from './GameArtwork';
 import { gameQuery, SECTIONS, SORTS } from './queries';
 import { useDebouncedSearch, useDiscovery, usePlatforms } from './useDiscovery';
 
-export function RawgAttribution() {
+export function RawgAttribution({ compact = false }) {
   return (
     <Pressable accessibilityRole="link" onPress={() => Linking.openURL('https://rawg.io/').catch(() => {})}>
-      <Text style={styles.link}>Game data and artwork by RAWG</Text>
+      <Text style={styles.link}>{compact ? 'RAWG' : 'Game data by RAWG'}</Text>
     </Pressable>
   );
 }
@@ -125,7 +125,6 @@ export default function DiscoverScreen({ Button, GameRow, tracked, classifiedIds
             )}
             <RawgAttribution />
             <CoverAttribution />
-            <Text style={styles.muted}>Artwork may be promotional imagery.</Text>
             {section === 'upcoming' && (
               <Text style={styles.muted}>Dated releases in the next 12 months. TBA releases are excluded.</Text>
             )}

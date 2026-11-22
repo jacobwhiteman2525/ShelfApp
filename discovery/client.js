@@ -39,21 +39,21 @@ async function fetchProxy(path) {
   }
 }
 
-function request(path, ttl, refresh) {
-  if (pending.has(path)) return pending.get(path);
+function request(path, ttl, refresh, storageKey = path) {
+  if (pending.has(storageKey)) return pending.get(storageKey);
   const job = (async () => {
-    const cached = await cache.get(path);
+    const cached = await cache.get(storageKey);
     if (!refresh && cached?.expires > Date.now()) return { data: cached.data, cached: true };
     try {
       const data = await fetchProxy(path);
-      await cache.put(path, data, ttl);
+      await cache.put(storageKey, data, ttl);
       return { data };
     } catch (error) {
       if (!cached) throw error;
       return { data: cached.data, cached: true, warning: error.message };
     }
-  })().finally(() => pending.delete(path));
-  pending.set(path, job);
+  })().finally(() => pending.delete(storageKey));
+  pending.set(storageKey, job);
   return job;
 }
 
@@ -75,9 +75,11 @@ async function list(filters, page = 1, refresh = false) {
 export const artworkPath = (title, platform) =>
   queryPath('/artwork', { title, platform });
 
+const coverCacheKey = path => 'physical-front:' + path;
+
 export const artworkCache = {
-  get: async path => (await cache.get(path))?.data,
-  resolve: async path => (await request(path, 24 * hour, false)).data,
+  get: async path => (await cache.get(coverCacheKey(path)))?.data,
+  resolve: async path => (await request(path, 24 * hour, false, coverCacheKey(path))).data,
 };
 
 export const rawg = {

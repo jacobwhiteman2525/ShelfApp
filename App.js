@@ -8,8 +8,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DiscoverScreen, { RawgAttribution } from './discovery/DiscoverScreen';
 import { MetadataLink, useRawgDetails } from './discovery/detail';
-import { fillMetadata, linkMetadata, sameGame, selectPlatform } from './discovery/model';
-import { collectGame, readSavedRecords, savedGame } from './collectionRecords';
+import { fillMetadata, sameGame, selectPlatform } from './discovery/model';
+import { collectGame, enrichSavedGame, linkSavedGame, readSavedRecords, savedGame } from './collectionRecords';
 import GameArtwork, { CoverAttribution } from './discovery/GameArtwork';
 import GameDescription from './discovery/GameDescription';
 
@@ -246,13 +246,18 @@ function Shelf({
 
 function GameDetail({
   game, source, onClose, onSave, onAddToShelf, shelves,
-  onAddToWishlist, onRemoveFromWishlist, onAddToCollection, onLink, onExplicitDetected,
+  onAddToWishlist, onRemoveFromWishlist, onAddToCollection, onLink, onMetadata, onExplicitDetected,
 }) {
   const slide = useRef(new Animated.Value(0)).current;
   const [notes, setNotes] = useState(game.notes || '');
   const scrollRef = useRef(null);
   const notesPosition = useRef(0);
   const details = useRawgDetails(game.provider === 'rawg' ? game.providerId : undefined);
+  const saveMetadata = useRef(onMetadata);
+  saveMetadata.current = onMetadata;
+  useEffect(() => {
+    if (details.data) saveMetadata.current?.(details.data);
+  }, [details.data]);
   const options = game.availablePlatforms || [];
   const [platformId, setPlatformId] = useState(options.length === 1 ? options[0].id : null);
   const option = options.find(item => item.id === platformId);
@@ -382,13 +387,8 @@ function GameDetail({
               </View>
 
               <View style={styles.detailDivider} />
-              <CoverAttribution />
               {game.provider === 'rawg' ? (
                 <>
-                  <RawgAttribution />
-                  {!!(game.backgroundImageUrl || game.coverUrl) && <Text style={styles.detailInfoLabel}>
-                    RAWG artwork may be promotional imagery.
-                  </Text>}
                   {details.loading && <Text style={styles.subheading}>Loading game metadata…</Text>}
                   {!!details.message && (
                     <>
@@ -538,6 +538,11 @@ function GameDetail({
                   </View>
                 </>
               )}
+              <View style={styles.detailSources}>
+                <Text style={styles.detailInfoLabel}>Game data sources</Text>
+                <RawgAttribution compact />
+                <CoverAttribution compact />
+              </View>
             </View>
             <Pressable
               accessible={false}
@@ -729,17 +734,14 @@ export default function App() {
     : detail?.source === 'wishlist' ? wishlist.find(g => g.id === detail.game.id) : detail?.game;
 
   const linkGame = (candidate, platform) => {
-    const linked = linkMetadata(detailGame, candidate, platform);
-    const conflict = [...library.games, ...wishlist].some(game =>
-      game !== detailGame && sameGame(game, linked));
-    if (conflict) {
-      Alert.alert('Game already tracked', 'This RAWG game and platform are already in your Collection or Wishlist.');
-      return;
-    }
-    const apply = games => games.map(game => game.id === detailGame.id
-      ? linkMetadata(game, candidate, platform) : game);
-    if (detail.source === 'collection') update(old => ({ ...old, games: apply(old.games) }));
+    const collection = detail.source === 'collection';
+    const records = collection ? library.games : wishlist;
+    const other = collection ? wishlist : library.games;
+    const apply = games => linkSavedGame(games, other, detailGame.id, candidate, platform);
+    if (apply(records) === records) return false;
+    if (collection) update(old => ({ ...old, games: apply(old.games) }));
     else setWishlist(apply);
+    return true;
   };
 
   return (
@@ -1005,6 +1007,14 @@ export default function App() {
           }
           onAddToShelf={addMembership}
           onLink={detail.source !== 'discover' ? linkGame : undefined}
+          onMetadata={detail.source === 'discover' ? undefined : metadata => {
+            const apply = games => enrichSavedGame(games, detailGame.id, metadata);
+            if (detail.source === 'collection') update(old => {
+              const games = apply(old.games);
+              return games === old.games ? old : { ...old, games };
+            });
+            else setWishlist(apply);
+          }}
           onAddToWishlist={game => {
             addToWishlist(game);
             setDetail(null);
@@ -1370,6 +1380,7 @@ const styles = StyleSheet.create({
   detailHero: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   detailHeroCase: { width: '48%', alignSelf: 'flex-start' },
   detailHeroInfo: { flex: 1, minWidth: 0, paddingTop: 3 },
+  detailSources: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 18 },
   detailStatus: { color: '#9ddbbb', fontSize: 12, marginBottom: 7 },
   detailDivider: {
     height: 1, backgroundColor: C.line, marginVertical: 18,

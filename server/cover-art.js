@@ -1,4 +1,5 @@
 const { normalizeGameText } = require('../discovery/model');
+const { frontCoverUrl } = require('../discovery/coverPolicy');
 
 const aliases = {
   gamecube: 'nintendo gamecube',
@@ -10,10 +11,10 @@ const aliases = {
 
 function platformName(value) {
   const name = normalizeGameText(value).replace(/^(sony|microsoft) /, '');
-  return aliases[name]?.replace(/^microsoft /, '') || name;
+  return Object.hasOwn(aliases, name) ? aliases[name].replace(/^microsoft /, '') : name;
 }
 
-function selectFrontCover(payload, title, platformId) {
+function selectFrontCover(payload, title, platformId, platform) {
   const games = payload?.data?.games;
   if (!Array.isArray(games) || payload?.pages?.next) return {};
   const matching = games.filter(game => Number(game.platform) === platformId &&
@@ -25,10 +26,12 @@ function selectFrontCover(payload, title, platformId) {
     image.type === 'boxart' && image.side === 'front' &&
     /^boxart\/front\/[\w.-]+\.(?:png|jpe?g|webp)$/i.test(image.filename));
   const base = boxart?.base_url?.original;
-  if (front && /^https:\/\/cdn\.thegamesdb\.net\/images\/[\w/-]*\/$/i.test(base)) {
-    return { coverArtUrl: new URL(front.filename, base).href, coverArtSource: 'thegamesdb' };
-  }
-  return {};
+  if (!front || !base) return {};
+  const cover = {
+    coverArtUrl: base + front.filename, coverArtSource: 'thegamesdb',
+    coverArtKind: 'physical-front', coverArtTitle: title, coverArtPlatform: platform,
+  };
+  return frontCoverUrl(cover, title, platform) ? cover : {};
 }
 
 function createCoverLookup({ key, fetchArtwork = fetch }) {
@@ -53,7 +56,7 @@ function createCoverLookup({ key, fetchArtwork = fetch }) {
     const payload = await read('Games/ByGameName', {
       name: title, include: 'boxart', 'filter[platform]': String(id),
     });
-    return selectFrontCover(payload, title, id);
+    return selectFrontCover(payload, title, id, platform);
   };
 }
 
