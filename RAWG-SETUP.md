@@ -37,6 +37,23 @@ ShelfVault v0.4 uses RAWG for Discover and on-demand metadata. Collection and Wi
 
 5. To get the JavaScript bundle over a tunnel, run `npm run tunnel` instead of the LAN command. The Expo tunnel carries Metro traffic only. Keep the proxy’s LAN URL if the iPhone can reach it. For off-LAN testing, bind the proxy to `127.0.0.1` and use a separate private HTTPS tunnel that forwards to port 8787 and supports the app’s Authorization header. Set `EXPO_PUBLIC_RAWG_PROXY_URL` to that HTTPS address, then restart Expo and reload the app. Access policies vary by tunnel provider. Keep the development tunnel scoped to your devices.
 
+## Diagnose the local connection
+
+Run these in PowerShell from the workspace. Replace the example LAN address with the current Wi-Fi IPv4 address from `ipconfig`.
+
+```powershell
+ipconfig
+netstat -ano -p tcp | Select-String ':8787|:8081'
+Test-NetConnection 10.0.0.145 -Port 8787
+curl.exe --noproxy "*" -sS --max-time 5 -o NUL -w "HTTP %{http_code}\n" http://10.0.0.145:8787/platforms
+node -e "const fs=require('node:fs');const {parseEnv}=require('node:util');const read=f=>parseEnv(fs.readFileSync(f,'utf8'));const p=read('.env.proxy'),e=read('.env.local');const u=new URL(e.EXPO_PUBLIC_RAWG_PROXY_URL);console.log({bind:p.RAWG_PROXY_HOST,port:p.RAWG_PROXY_PORT,origin:u.origin,keyConfigured:!!p.RAWG_API_KEY,tokensMatch:!!p.RAWG_PROXY_TOKEN&&p.RAWG_PROXY_TOKEN===e.EXPO_PUBLIC_RAWG_PROXY_TOKEN});"
+node --env-file=.env.local -e "fetch(process.env.EXPO_PUBLIC_RAWG_PROXY_URL+'/platforms?page=1',{headers:{Authorization:'Bearer '+process.env.EXPO_PUBLIC_RAWG_PROXY_TOKEN},signal:AbortSignal.timeout(10000)}).then(r=>{console.log('Authenticated HTTP '+r.status);if(!r.ok)process.exitCode=1;}).catch(()=>{console.error('Could not connect');process.exitCode=1;});"
+```
+
+The listener should bind to the current Wi-Fi IPv4 address or `0.0.0.0`. The unauthenticated request should return **401**. The authenticated request should return **200**. An authenticated **401** can mean the running proxy has a different development token or RAWG rejected the key. **403**, **429**, and **502/504** indicate access, rate-limit, or upstream problems once the proxy is reachable.
+
+Open the same unauthenticated URL in iPhone Safari. A JSON response saying **Proxy access denied** confirms that the phone can reach port 8787. If Windows receives **401** and the iPhone times out, check that both are on the same Wi-Fi and that the Windows firewall allows the port on the Private profile. If Safari reaches the proxy but Expo Go still fails, check Expo Go’s Local Network permission and fully reload the app. After changing the proxy URL or token, restart Expo with `npm start -- --lan --clear` if the old settings persist. If plain HTTP still fails in Expo Go, use the private HTTPS proxy tunnel described above.
+
 ## RAWG terms and hosting
 
 The RAWG API page advertises 20,000 requests per month and requires an active RAWG link wherever its data or images appear. Its Free pricing card says non-commercial only, while the API terms describe a limited free commercial allowance. Use a personal development key here and confirm the applicable plan, licensing and limits with RAWG before release or commercial use. RAWG disclaims ownership of API images and prohibits redistribution of its data. ShelfVault labels the imagery as potentially promotional and keeps its browsing cache on the device. [RAWG API and pricing](https://rawg.io/apidocs) · [API terms](https://rawg.io/tos_api)
