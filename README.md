@@ -1,4 +1,8 @@
-# ShelfApp v0.1 — Expo / React Native
+# ShelfVault v0.4
+
+See [RAWG setup and iPhone verification](RAWG-SETUP.md) to run the local discovery proxy. The prototype notes below describe the original release.
+
+## ShelfApp v0.1 prototype
 
 An iPhone-friendly prototype of a game library that looks like real shelves. This is a new React Native implementation of the earlier SwiftUI concept; it does not import the SwiftUI code or its on-device saved data.
 

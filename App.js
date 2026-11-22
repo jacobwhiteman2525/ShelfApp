@@ -6,6 +6,10 @@ import {
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DiscoverScreen, { RawgAttribution } from './discovery/DiscoverScreen';
+import { MetadataLink, useRawgDetails } from './discovery/detail';
+import { fillMetadata, linkMetadata, sameGame, selectPlatform } from './discovery/model';
+import { collectGame, readSavedRecords, savedGame } from './collectionRecords';
 
 const STORE_KEY = 'shelfvault.expo.library.v1';
 const WISHLIST_KEY = 'shelfvault.expo.wishlist.v1';
@@ -34,98 +38,6 @@ const PS4_TITLES = [
   'Uncharted: The Nathan Drake Collection',
   'Tunic', 'Until Dawn', "Tom Clancy's The Division",
   'Tomb Raider: Definitive Edition',
-];
-
-/**
- * @typedef {Object} GameMetadata
- * @property {string} title
- * @property {string} platform
- * @property {string} [coverUrl]
- * @property {string} [edition]
- * @property {string} [description]
- * @property {string} [releaseDate]
- * @property {string} [genre]
- * @property {string} [developer]
- * @property {string} [publisher]
- * @property {number} [metacriticScore] Critic score out of 100.
- * @property {number} [userScore] User score out of 10.
- * @property {string} [contentRating]
- * @property {string} [format]
- */
-
-const METADATA_FIELDS = [
-  ['edition', 'Edition'],
-  ['releaseDate', 'Release date'],
-  ['genre', 'Genre'],
-  ['developer', 'Developer'],
-  ['publisher', 'Publisher'],
-  ['metacriticScore', 'Metacritic critic score', '/100'],
-  ['userScore', 'User score', '/10'],
-  ['contentRating', 'Content rating'],
-  ['format', 'Format'],
-];
-
-/** @type {Array<GameMetadata & { id: string }>} */
-const DISCOVER_GAMES = [
-  ...SWITCH_TITLES.map(title => ({
-    title, platform: 'Nintendo Switch',
-  })),
-  ...PS4_TITLES.map(title => ({
-    title, platform: 'PlayStation 4',
-  })),
-  ...[
-    'The Legend of Zelda: Breath of the Wild',
-    'The Legend of Zelda: Tears of the Kingdom',
-    'Super Mario Odyssey', 'Super Mario Bros. Wonder',
-    'Super Smash Bros. Ultimate', 'Animal Crossing: New Horizons',
-    'Xenoblade Chronicles: Definitive Edition',
-    'Xenoblade Chronicles 2', 'Xenoblade Chronicles 3',
-    'Fire Emblem: Three Houses', 'Astral Chain',
-    'Bayonetta 3', 'Kirby and the Forgotten Land',
-    'Luigi’s Mansion 3', 'Donkey Kong Country: Tropical Freeze',
-  ].map(title => ({ title, platform: 'Nintendo Switch' })),
-  ...[
-    'Bloodborne', 'God of War', 'God of War Ragnarök',
-    'Ghost of Tsushima', 'Horizon Zero Dawn',
-    'Horizon Forbidden West', 'The Last of Us Part II',
-    'Persona 5', 'Final Fantasy VII Remake',
-    'Red Dead Redemption 2', 'Sekiro: Shadows Die Twice',
-    'Elden Ring', 'Resident Evil 2',
-  ].map(title => ({ title, platform: 'PlayStation 4' })),
-  ...[
-    'Astro Bot', 'Demon’s Souls', 'Returnal',
-    'Marvel’s Spider-Man 2', 'Final Fantasy XVI',
-    'Final Fantasy VII Rebirth', 'Ratchet & Clank: Rift Apart',
-    'Stellar Blade', 'Death Stranding 2: On the Beach',
-    'Elden Ring', 'Resident Evil 4',
-  ].map(title => ({ title, platform: 'PlayStation 5' })),
-  ...[
-    'Super Mario 64', 'The Legend of Zelda: Ocarina of Time',
-    'The Legend of Zelda: Majora’s Mask',
-    'Banjo-Kazooie', 'Paper Mario', 'GoldenEye 007',
-  ].map(title => ({ title, platform: 'Nintendo 64' })),
-  ...[
-    'Super Mario Sunshine', 'Metroid Prime',
-    'The Legend of Zelda: The Wind Waker',
-    'The Legend of Zelda: Twilight Princess',
-    'Paper Mario: The Thousand-Year Door',
-    'Luigi’s Mansion', 'Super Smash Bros. Melee',
-  ].map(title => ({ title, platform: 'Nintendo GameCube' })),
-  ...[
-    'The Legend of Zelda: A Link Between Worlds',
-    'Fire Emblem Awakening', 'Pokémon X',
-    'Pokémon Alpha Sapphire', 'Super Mario 3D Land',
-    'Kid Icarus: Uprising', 'Animal Crossing: New Leaf',
-  ].map(title => ({ title, platform: 'Nintendo 3DS' })),
-].map((game, index) => ({
-  ...game,
-  id: `catalog-${index}`,
-}));
-
-const CONSOLES = [
-  'All Consoles', 'Nintendo Switch', 'PlayStation 4',
-  'PlayStation 5', 'Nintendo 64',
-  'Nintendo GameCube', 'Nintendo 3DS',
 ];
 
 const uid = () =>
@@ -175,29 +87,9 @@ const labelColor = hex =>
   ['#e8d8ac', '#f1ca5b', '#ece8df', '#dedede', '#8294a4']
     .includes(hex) ? '#1e2130' : '#fff';
 
-const normalizeGameText = value =>
-  value.normalize('NFKC').trim().replace(/\s+/g, ' ')
-    .replace(/[\u2018\u2019]/g, "'").toLowerCase();
-
-const sameGame = (a, b) =>
-  normalizeGameText(a.title) === normalizeGameText(b.title) &&
-  normalizeGameText(a.platform) === normalizeGameText(b.platform);
-
 const hasMetadata = value =>
   (typeof value === 'string' && value.trim() !== '') ||
   Number.isFinite(value);
-
-function resolveMetadata(game) {
-  const catalogGame = DISCOVER_GAMES.find(item => sameGame(item, game));
-  const metadata = { title: game.title, platform: game.platform };
-
-  for (const field of ['coverUrl', 'description', ...METADATA_FIELDS.map(([key]) => key)]) {
-    const value = hasMetadata(game[field]) ? game[field] : catalogGame?.[field];
-    if (hasMetadata(value)) metadata[field] = value;
-  }
-
-  return metadata;
-}
 
 function Button({ children, onPress, selected = false, style, disabled }) {
   return (
@@ -352,13 +244,19 @@ function Shelf({
 
 function GameDetail({
   game, source, onClose, onSave, onAddToShelf, shelves,
-  onAddToWishlist, onRemoveFromWishlist, onAddToCollection,
+  onAddToWishlist, onRemoveFromWishlist, onAddToCollection, onLink,
 }) {
-  const [coverFailed, setCoverFailed] = useState(false);
+  const [failedCover, setFailedCover] = useState(null);
   const slide = useRef(new Animated.Value(0)).current;
   const [notes, setNotes] = useState(game.notes || '');
   const scrollRef = useRef(null);
   const notesPosition = useRef(0);
+  const details = useRawgDetails(game.provider === 'rawg' ? game.providerId : undefined);
+  const options = game.availablePlatforms || [];
+  const [platformId, setPlatformId] = useState(options.length === 1 ? options[0].id : null);
+  const option = options.find(item => item.id === platformId);
+  game = fillMetadata(game, details.data);
+  if (option) game = selectPlatform(game, option);
 
   useEffect(() => {
     Animated.spring(slide, {
@@ -461,29 +359,31 @@ function GameDetail({
                     padding: 6,
                   }}>
                     <Text style={styles.detailCasePlatform} numberOfLines={1}>
-                      {game.platform}
+                      {game.platform || (options.length ? 'Multiple platforms' : 'Platform unavailable')}
                     </Text>
                   </View>
-                  {game.coverUrl && !coverFailed ? (
+                  {game.coverUrl && failedCover !== game.coverUrl ? (
                     <Image
                       source={{ uri: game.coverUrl }}
                       style={{ flex: 1, width: '100%' }}
                       resizeMode="contain"
-                      accessibilityLabel={'Cover artwork for ' + game.title}
-                      onError={() => setCoverFailed(true)}
+                      accessibilityLabel={'Artwork for ' + game.title}
+                      onError={() => setFailedCover(game.coverUrl)}
                     />
                   ) : (
                     <View style={styles.detailCaseFallback}>
                       <Text style={styles.detailCaseTitle} numberOfLines={5}>
                         {game.title}
                       </Text>
-                      <Text style={styles.detailCaseMissing}>Cover unavailable</Text>
+                      <Text style={styles.detailCaseMissing}>Artwork unavailable</Text>
                     </View>
                   )}
                 </Animated.View>
                 <View style={styles.detailHeroInfo}>
                   <Text style={styles.detailTitle}>{game.title}</Text>
-                  <Text style={styles.subheading}>{game.platform}</Text>
+                  <Text style={styles.subheading}>
+                    {game.platform || (options.length ? 'Multiple platforms' : 'Platform unavailable')}
+                  </Text>
                   <Text style={styles.detailStatus}>
                     {source === 'collection' ? '✓ In Collection'
                       : source === 'wishlist' ? '♡ On Wishlist' : 'Discover'}
@@ -498,6 +398,22 @@ function GameDetail({
               </View>
 
               <View style={styles.detailDivider} />
+              {game.provider === 'rawg' ? (
+                <>
+                  <RawgAttribution />
+                  {!!game.coverUrl && <Text style={styles.detailInfoLabel}>
+                    RAWG artwork may be promotional imagery.
+                  </Text>}
+                  {details.loading && <Text style={styles.subheading}>Loading game metadata…</Text>}
+                  {!!details.message && (
+                    <>
+                      <Text style={styles.subheading}>{details.message}</Text>
+                      <Button onPress={details.retry}>Retry metadata</Button>
+                    </>
+                  )}
+                </>
+              ) : onLink && <MetadataLink game={game} Button={Button}
+                textStyle={styles.subheading} onLink={onLink} />}
               <Text style={styles.detailSectionTitle}>About this game</Text>
               <Text style={styles.detailBody}>
                 {hasMetadata(game.description)
@@ -522,17 +438,25 @@ function GameDetail({
                   <Text style={styles.detailRatingValue}>
                     {score(game.metacriticScore, '/100')}
                   </Text>
-                  <Text style={styles.detailRatingLabel}>Metacritic</Text>
+                  <Text style={styles.detailRatingLabel}>Metacritic critic score</Text>
                 </View>
                 <View style={styles.detailRatingCard}>
                   <Text style={styles.detailRatingValue}>
-                    {score(game.userScore, '/10')}
+                    {game.provider === 'rawg' ? score(game.rawgRating, '/5') : score(game.userScore, '/10')}
                   </Text>
-                  <Text style={styles.detailRatingLabel}>User Score</Text>
+                  <Text style={styles.detailRatingLabel}>
+                    {game.provider === 'rawg' ? 'RAWG community rating' : 'User Score'}
+                  </Text>
+                  {Number.isInteger(game.rawgRatingsCount) && <Text style={styles.detailRatingLabel}>
+                    {game.rawgRatingsCount.toLocaleString()} ratings
+                  </Text>}
                 </View>
               </View>
+              {game.provider === 'rawg' && Number.isFinite(game.userScore) && (
+                <Text style={styles.detailInfoLabel}>User score {score(game.userScore, '/10')}</Text>
+              )}
               {(!Number.isFinite(game.metacriticScore) ||
-                !Number.isFinite(game.userScore)) && (
+                !Number.isFinite(game.provider === 'rawg' ? game.rawgRating : game.userScore)) && (
                 <Text style={styles.detailInfoLabel}>
                   Missing scores will appear when metadata is available.
                 </Text>
@@ -600,9 +524,23 @@ function GameDetail({
               ) : (
                 <>
                   <View style={styles.detailDivider} />
+                  {source === 'discover' && options.length > 1 && (
+                    <>
+                      <Text style={styles.detailSectionTitle}>Choose a platform</Text>
+                      <View style={styles.detailActions}>
+                        {options.map(item => (
+                          <Button key={item.id} selected={platformId === item.id}
+                            onPress={() => setPlatformId(item.id)}>{item.name}</Button>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                  {source === 'discover' && options.length === 0 && (
+                    <Text style={styles.subheading}>Use manual entry to save a game without a listed platform.</Text>
+                  )}
                   <View style={styles.detailActions}>
                     {source === 'discover' ? (
-                      <Button selected onPress={onAddToWishlist}>
+                      <Button selected disabled={!option} onPress={() => onAddToWishlist(game)}>
                         ♡ Add to Wishlist
                       </Button>
                     ) : (
@@ -610,7 +548,7 @@ function GameDetail({
                         Remove from Wishlist
                       </Button>
                     )}
-                    <Button onPress={onAddToCollection}>
+                    <Button disabled={source === 'discover' && !option} onPress={() => onAddToCollection(game)}>
                       {source === 'wishlist'
                         ? 'Move to Collection' : '+ Add to Collection'}
                     </Button>
@@ -630,22 +568,30 @@ function GameDetail({
   );
 }
 
-function GameRow({ game, onPress }) {
+function GameRow({ game, onPress, summary }) {
+  const [failedCover, setFailedCover] = useState(null);
   return (
     <Pressable accessibilityRole="button" style={styles.gameRow} onPress={onPress}>
       <View style={[
         styles.gameCover,
         { borderColor: platformColor(game.platform) },
       ]}>
-        <Text style={{ color: '#fff', fontSize: 20 }}>▣</Text>
+        {game.coverUrl && failedCover !== game.coverUrl ? (
+          <Image
+            source={{ uri: game.coverUrl }}
+            style={{ width: '100%', height: '100%', borderRadius: 4 }}
+            onError={() => setFailedCover(game.coverUrl)}
+          />
+        ) : <Text style={{ color: '#fff', fontSize: 20 }}>▣</Text>}
       </View>
       <View style={{ flex: 1, gap: 5 }}>
         <Text style={{ color: C.text, fontWeight: '700' }}>
           {game.title}
         </Text>
         <Text style={{ color: C.muted, fontSize: 12 }}>
-          {game.platform}
+          {game.platform || (game.availablePlatforms?.length ? 'Multiple platforms' : 'Platform unavailable')}
         </Text>
+        {!!summary && <Text style={styles.subheading}>{summary}</Text>}
       </View>
     </Pressable>
   );
@@ -655,8 +601,11 @@ export default function App() {
   const [library, setLibrary] = useState(null);
   const [wishlist, setWishlist] = useState([]);
   const [ready, setReady] = useState(false);
+  const [storageError, setStorageError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const [tab, setTab] = useState('collection');
+  const [visitedDiscover, setVisitedDiscover] = useState(false);
   const [view, setView] = useState('shelf');
   const [detail, setDetail] = useState(null);
   const [moving, setMoving] = useState(null);
@@ -664,41 +613,23 @@ export default function App() {
   const [entry, setEntry] = useState('');
   const [platform, setPlatform] = useState('Nintendo Switch');
 
-  const [search, setSearch] = useState('');
-  const [consoleFilter, setConsoleFilter] = useState('All Consoles');
-  const [discoverSort, setDiscoverSort] = useState('az');
-
   useEffect(() => {
     let active = true;
     (async () => {
-      let savedLibrary = seed();
-      let savedWishlist = [];
-
       try {
-        const raw = await AsyncStorage.getItem(STORE_KEY);
-        if (raw) savedLibrary = JSON.parse(raw);
-      } catch (e) {
-        console.warn('Could not load collection', e);
-      }
-
-      try {
-        const raw = await AsyncStorage.getItem(WISHLIST_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) savedWishlist = parsed;
+        const stored = new Map(await AsyncStorage.multiGet([STORE_KEY, WISHLIST_KEY]));
+        const saved = readSavedRecords(stored.get(STORE_KEY), stored.get(WISHLIST_KEY), seed);
+        if (active) {
+          setLibrary(saved.library);
+          setWishlist(saved.wishlist);
+          setReady(true);
         }
-      } catch (e) {
-        console.warn('Could not load wishlist', e);
-      }
-
-      if (active) {
-        setLibrary(savedLibrary);
-        setWishlist(savedWishlist);
-        setReady(true);
+      } catch {
+        if (active) setStorageError(true);
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [loadAttempt]);
 
   useEffect(() => {
     if (ready && library) {
@@ -754,57 +685,28 @@ export default function App() {
   const isOwned = game =>
     library.games.some(g => sameGame(g, game));
 
-  const isWishlisted = game =>
-    wishlist.some(g => sameGame(g, game));
-
   const addToWishlist = game => {
     if (isOwned(game)) return;
 
     setWishlist(old => old.some(g => sameGame(g, game))
       ? old
-      : [...old, { ...resolveMetadata(game), id: uid() }]
+      : [...old, { ...savedGame(game), id: uid() }]
     );
   };
 
   const removeFromWishlist = game =>
-    setWishlist(old => old.filter(g => !sameGame(g, game)));
+    setWishlist(old => old.filter(g => g.id !== game.id));
 
   const addToCollection = game => {
     const id = uid();
     const platformShelfId = uid();
-    const savedGame = wishlist.find(item => sameGame(item, game));
-    const metadata = resolveMetadata({ ...savedGame, ...game });
-    update(l => {
-      if (l.games.some(g => sameGame(g, game))) return l;
-
-      const shelf = l.shelves.find(s =>
-        normalizeGameText(s.name) === normalizeGameText(game.platform)
-      );
-      return {
-        ...l,
-        games: [...l.games, {
-          ...metadata,
-          id,
-          owned: true,
-          notes: '',
-        }],
-        shelves: shelf
-          ? l.shelves.map(s =>
-              s.id === shelf.id
-                ? { ...s, ids: [...s.ids, id] }
-                : s
-            )
-          : [
-              ...l.shelves,
-              { id: platformShelfId, name: game.platform, ids: [id] },
-            ],
-      };
-    });
-
-    removeFromWishlist(game);
+    const wish = wishlist.find(item => item.id === game.id) ||
+      wishlist.find(item => sameGame(item, game));
+    update(l => collectGame(l, game, wish, id, platformShelfId));
+    if (wish) removeFromWishlist(wish);
   };
 
-  const add = () => {
+  const add = (toWishlist = false) => {
     const name = entry.trim();
     if (!name) return;
 
@@ -817,7 +719,10 @@ export default function App() {
         ],
       }));
     } else {
-      addToCollection({ title: name, platform });
+      const game = { title: name, platform: platform.trim() };
+      if (!game.platform) return;
+      if (toWishlist) addToWishlist(game);
+      else addToCollection(game);
     }
     setDialog(null);
     setEntry('');
@@ -826,21 +731,16 @@ export default function App() {
   if (!ready || !library) {
     return (
       <SafeAreaView style={styles.app}>
-        <Text style={styles.heading}>Loading ShelfVault...</Text>
+        <Text style={styles.heading}>
+          {storageError ? 'Could not read your saved ShelfVault data' : 'Loading ShelfVault…'}
+        </Text>
+        {storageError && <Button onPress={() => {
+          setStorageError(false);
+          setLoadAttempt(value => value + 1);
+        }}>Retry</Button>}
       </SafeAreaView>
     );
   }
-
-  const filteredDiscover = DISCOVER_GAMES.filter(game =>
-    (consoleFilter === 'All Consoles' || game.platform === consoleFilter) &&
-    game.title.toLowerCase().includes(search.trim().toLowerCase()) &&
-    !isOwned(game) &&
-    !isWishlisted(game)
-  ).sort((a, b) =>
-    discoverSort === 'za'
-      ? b.title.localeCompare(a.title)
-      : a.title.localeCompare(b.title)
-  );
 
   const sortedWishlist = [...wishlist].sort((a, b) =>
     a.title.localeCompare(b.title)
@@ -853,7 +753,21 @@ export default function App() {
 
   const detailGame = detail?.source === 'collection'
     ? library.games.find(g => g.id === detail.game.id)
-    : detail?.game;
+    : detail?.source === 'wishlist' ? wishlist.find(g => g.id === detail.game.id) : detail?.game;
+
+  const linkGame = (candidate, platform) => {
+    const linked = linkMetadata(detailGame, candidate, platform);
+    const conflict = [...library.games, ...wishlist].some(game =>
+      game !== detailGame && sameGame(game, linked));
+    if (conflict) {
+      Alert.alert('Game already tracked', 'This RAWG game and platform are already in your Collection or Wishlist.');
+      return;
+    }
+    const apply = games => games.map(game => game.id === detailGame.id
+      ? linkMetadata(game, candidate, platform) : game);
+    if (detail.source === 'collection') update(old => ({ ...old, games: apply(old.games) }));
+    else setWishlist(apply);
+  };
 
   return (
     <SafeAreaView style={styles.app}>
@@ -878,6 +792,7 @@ export default function App() {
 
       {tab === 'collection' && (
         <>
+          {library.games.some(game => game.provider === 'rawg') && <RawgAttribution />}
           <View style={styles.tabs}>
             {['shelf', 'grid', 'list'].map(v => (
               <Button
@@ -1002,6 +917,7 @@ export default function App() {
 
       {tab === 'wishlist' && (
         <View style={{ flex: 1 }}>
+          {wishlist.some(game => game.provider === 'rawg') && <RawgAttribution />}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>♡ Wishlist</Text>
             <Text style={styles.subheading}>
@@ -1043,107 +959,19 @@ export default function App() {
         </View>
       )}
 
-      {tab === 'discover' && (
-        <View style={{ flex: 1 }}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>⌕ Discover</Text>
-            <Text style={styles.subheading}>
-              Explore games by console
-            </Text>
-          </View>
-
-          <View style={{ paddingHorizontal: 12 }}>
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search games..."
-              placeholderTextColor="#888"
-              style={styles.input}
-              returnKeyType="search"
-            />
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={{ marginBottom: 10, flexGrow: 0 }}
-            >
-              {CONSOLES.map(consoleName => (
-                <Button
-                  key={consoleName}
-                  selected={consoleFilter === consoleName}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setConsoleFilter(consoleName);
-                  }}
-                  style={{ marginRight: 7 }}
-                >
-                  {consoleName}
-                </Button>
-              ))}
-            </ScrollView>
-
-            <View style={{
-              flexDirection: 'row',
-              gap: 7,
-              marginBottom: 8,
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: C.muted, fontSize: 12 }}>
-                Sort:
-              </Text>
-              <Button
-                selected={discoverSort === 'az'}
-                onPress={() => setDiscoverSort('az')}
-              >
-                A–Z
-              </Button>
-              <Button
-                selected={discoverSort === 'za'}
-                onPress={() => setDiscoverSort('za')}
-              >
-                Z–A
-              </Button>
-            </View>
-
-            <Text style={{ color: C.muted, fontSize: 11, marginBottom: 8 }}>
-              Popularity and review-score rankings coming with
-              the live game database.
-            </Text>
-            <Text style={{ color: C.muted, fontSize: 12 }}>
-              {filteredDiscover.length} catalog results
-            </Text>
-          </View>
-
-          <ScrollView
-            style={{ flex: 1 }}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            contentContainerStyle={{
-              padding: 12,
-              paddingBottom: 20,
+      {visitedDiscover && (
+        <View style={{ flex: 1, display: tab === 'discover' ? 'flex' : 'none' }}>
+          <DiscoverScreen
+            Button={Button}
+            GameRow={GameRow}
+            tracked={[...library.games, ...wishlist]}
+            onOpen={openDetail}
+            onManualAdd={() => {
+              Keyboard.dismiss();
+              setEntry('');
+              setDialog('game');
             }}
-          >
-            {filteredDiscover.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyTitle}>
-                  No games found
-                </Text>
-                <Text style={styles.emptyDescription}>
-                  Try another title or console.
-                  This version uses a limited starter catalog.
-                </Text>
-              </View>
-            ) : (
-              filteredDiscover.map(game => (
-                <GameRow
-                  key={game.id}
-                  game={game}
-                  onPress={() => openDetail(game)}
-                />
-              ))
-            )}
-          </ScrollView>
+          />
         </View>
       )}
 
@@ -1158,6 +986,7 @@ export default function App() {
             onPress={() => {
               Keyboard.dismiss();
               setMoving(null);
+              if (key === 'discover') setVisitedDiscover(true);
               setTab(key);
             }}
             style={styles.bottomTab}
@@ -1180,9 +1009,9 @@ export default function App() {
 
       {detailGame && (
         <GameDetail
-          key={detail.source + ':' + detailGame.id}
+          key={detail.source + ':' + (detailGame.id || detailGame.providerId)}
           source={detail.source}
-          game={{ ...detailGame, ...resolveMetadata(detailGame) }}
+          game={detailGame}
           shelves={library.shelves}
           onClose={() => setDetail(null)}
           onSave={(id, notes) =>
@@ -1194,16 +1023,17 @@ export default function App() {
             }))
           }
           onAddToShelf={addMembership}
-          onAddToWishlist={() => {
-            addToWishlist(detailGame);
+          onLink={detail.source !== 'discover' ? linkGame : undefined}
+          onAddToWishlist={game => {
+            addToWishlist(game);
             setDetail(null);
           }}
           onRemoveFromWishlist={() => {
             removeFromWishlist(detailGame);
             setDetail(null);
           }}
-          onAddToCollection={() => {
-            addToCollection(detailGame);
+          onAddToCollection={game => {
+            addToCollection(game);
             setDetail(null);
           }}
         />
@@ -1235,24 +1065,22 @@ export default function App() {
             />
 
             {dialog === 'game' && (
-              <View style={{
-                flexDirection: 'row',
-                gap: 6,
-                flexWrap: 'wrap',
-              }}>
-                {[
-                  'Nintendo Switch', 'PlayStation 4',
-                  'PlayStation 5', 'Other',
-                ].map(p => (
-                  <Button
-                    key={p}
-                    selected={platform === p}
-                    onPress={() => setPlatform(p)}
-                  >
-                    {p}
-                  </Button>
-                ))}
-              </View>
+              <>
+                <TextInput
+                  accessibilityLabel="Platform"
+                  value={platform}
+                  onChangeText={setPlatform}
+                  placeholder="Platform"
+                  placeholderTextColor="#888"
+                  style={styles.input}
+                />
+                <View style={styles.detailActions}>
+                  {['Nintendo Switch', 'PlayStation 4', 'PlayStation 5', 'Other'].map(option => (
+                    <Button key={option} selected={platform === option}
+                      onPress={() => setPlatform(option)}>{option}</Button>
+                  ))}
+                </View>
+              </>
             )}
 
             <View style={{
@@ -1263,10 +1091,13 @@ export default function App() {
               <Button onPress={() => setDialog(null)}>
                 Cancel
               </Button>
-              <Button selected onPress={add}>
-                Create
+              <Button selected onPress={() => add()} disabled={!entry.trim() || (dialog === 'game' && !platform.trim())}>
+                {dialog === 'shelf' ? 'Create' : 'Add to Collection'}
               </Button>
             </View>
+            {dialog === 'game' && <Button onPress={() => add(true)} disabled={!entry.trim() || !platform.trim()}>
+              Add to Wishlist
+            </Button>}
           </View>
         </KeyboardAvoidingView>
       </Modal>

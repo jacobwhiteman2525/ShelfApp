@@ -1,11 +1,13 @@
 {
   "name": "shelfvault",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "main": "index.js",
   "scripts": {
     "start": "expo start",
     "tunnel": "expo start --tunnel",
+    "proxy": "node --env-file=.env.proxy server/rawg-proxy.js",
+    "test": "node --test tests/discovery.test.js",
     "android": "expo start --android",
     "web": "expo start --web"
   },
