@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, Image, Keyboard, KeyboardAvoidingView, Modal, Platform,
+  Alert, Animated, Image, Keyboard, KeyboardAvoidingView, Modal, Platform,
   Pressable, SafeAreaView, ScrollView, StatusBar,
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -381,16 +381,35 @@ function GameDetail({
   const score = (value, suffix) =>
     Number.isFinite(value) ? `${value}${suffix}` : '—';
 
+  const requestClose = () => {
+    Keyboard.dismiss();
+
+    if (source === 'collection' && notes !== (game.notes || '')) {
+      Alert.alert(
+        'Discard unsaved notes?',
+        'Your Notes changes have not been saved.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: onClose },
+        ]
+      );
+      return;
+    }
+
+    onClose();
+  };
+
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible transparent animationType="fade" onRequestClose={requestClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
         <View style={styles.modalShade}>
           <Pressable
-            style={StyleSheet.absoluteFillObject}
-            onPress={Keyboard.dismiss}
+            accessible={false}
+            style={StyleSheet.absoluteFill}
+            onPress={requestClose}
           />
           <ScrollView
             ref={scrollRef}
@@ -399,13 +418,18 @@ function GameDetail({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
+            <Pressable
+              accessible={false}
+              style={styles.detailBackdropSpace}
+              onPress={requestClose}
+            />
             <View style={styles.detail}>
               <View style={styles.detailTopBar}>
                 <Text style={styles.detailEyebrow}>SHELFVAULT · GAME DETAILS</Text>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Close game details"
-                  onPress={onClose}
+                  onPress={requestClose}
                   style={styles.detailClose}
                 >
                   <Text style={styles.detailCloseText}>×</Text>
@@ -594,6 +618,11 @@ function GameDetail({
                 </>
               )}
             </View>
+            <Pressable
+              accessible={false}
+              style={styles.detailBackdropSpace}
+              onPress={requestClose}
+            />
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -1484,9 +1513,10 @@ const styles = StyleSheet.create({
   },
   detailScrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 12,
+  },
+  detailBackdropSpace: {
+    flexGrow: 1,
+    minHeight: 12,
   },
   detail: {
     backgroundColor: '#20212b',
