@@ -358,6 +358,7 @@ function GameDetail({
   const slide = useRef(new Animated.Value(0)).current;
   const [notes, setNotes] = useState(game.notes || '');
   const scrollRef = useRef(null);
+  const notesPosition = useRef(0);
 
   useEffect(() => {
     Animated.spring(slide, {
@@ -367,13 +368,21 @@ function GameDetail({
     }).start();
   }, [slide]);
 
+  const info = [
+    ['Release date', game.releaseDate],
+    ['Genre', game.genre],
+    ['Developer', game.developer],
+    ['Publisher', game.publisher],
+    ['Edition', game.edition],
+    ['Content rating', game.contentRating],
+    ['Format', game.format],
+  ].filter(([, value]) => hasMetadata(value));
+
+  const score = (value, suffix) =>
+    Number.isFinite(value) ? `${value}${suffix}` : '—';
+
   return (
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
@@ -391,124 +400,164 @@ function GameDetail({
             keyboardDismissMode="on-drag"
           >
             <View style={styles.detail}>
-              <Pressable
-                onPress={onClose}
-                style={{ alignSelf: 'flex-end', padding: 8 }}
-              >
-                <Text style={{ color: C.text, fontSize: 22 }}>×</Text>
-              </Pressable>
+              <View style={styles.detailTopBar}>
+                <Text style={styles.detailEyebrow}>SHELFVAULT · GAME DETAILS</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close game details"
+                  onPress={onClose}
+                  style={styles.detailClose}
+                >
+                  <Text style={styles.detailCloseText}>×</Text>
+                </Pressable>
+              </View>
 
-              <Animated.View style={[
-                styles.case,
-                {
-                  borderColor: platformColor(game.platform),
-                  transform: [
-                    {
-                      translateY: slide.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [70, 0],
-                      }),
-                    },
-                    {
-                      scale: slide.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.75, 1],
-                      }),
-                    },
-                  ],
-                },
-              ]}>
-                <View style={{
-                  backgroundColor: platformColor(game.platform),
-                  padding: 7,
-                }}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>
-                    {game.platform}
-                  </Text>
-                </View>
-                {game.coverUrl && !coverFailed ? (
-                  <Image
-                    source={{ uri: game.coverUrl }}
-                    style={{ flex: 1, width: '100%' }}
-                    resizeMode="contain"
-                    accessibilityLabel={'Cover artwork for ' + game.title}
-                    onError={() => setCoverFailed(true)}
-                  />
-                ) : (
+              <View style={styles.detailHero}>
+                <Animated.View style={[
+                  styles.case,
+                  styles.detailHeroCase,
+                  {
+                    borderColor: platformColor(game.platform),
+                    transform: [
+                      {
+                        translateY: slide.interpolate({
+                          inputRange: [0, 1], outputRange: [50, 0],
+                        }),
+                      },
+                      {
+                        scale: slide.interpolate({
+                          inputRange: [0, 1], outputRange: [0.85, 1],
+                        }),
+                      },
+                    ],
+                  },
+                ]}>
                   <View style={{
-                    flex: 1, justifyContent: 'center', padding: 15,
+                    backgroundColor: platformColor(game.platform),
+                    padding: 6,
                   }}>
-                    <Text style={{
-                      fontSize: 26, color: '#fff',
-                      fontWeight: '900', textAlign: 'center',
-                    }}>
-                      {game.title}
-                    </Text>
-                    <Text style={{
-                      color: C.muted, textAlign: 'center', marginTop: 15,
-                    }}>
-                      Cover unavailable
+                    <Text style={styles.detailCasePlatform} numberOfLines={1}>
+                      {game.platform}
                     </Text>
                   </View>
-                )}
-              </Animated.View>
-
-              <Text style={styles.detailTitle}>{game.title}</Text>
-              <Text style={styles.subheading}>{game.platform}</Text>
-              {game.description && (
-                <Text style={styles.subheading}>{game.description}</Text>
-              )}
-              {METADATA_FIELDS.map(([field, label, suffix = '']) =>
-                hasMetadata(game[field]) && (
-                  <Text key={field} style={styles.subheading}>
-                    {label}: {game[field]}{suffix}
+                  {game.coverUrl && !coverFailed ? (
+                    <Image
+                      source={{ uri: game.coverUrl }}
+                      style={{ flex: 1, width: '100%' }}
+                      resizeMode="contain"
+                      accessibilityLabel={'Cover artwork for ' + game.title}
+                      onError={() => setCoverFailed(true)}
+                    />
+                  ) : (
+                    <View style={styles.detailCaseFallback}>
+                      <Text style={styles.detailCaseTitle} numberOfLines={5}>
+                        {game.title}
+                      </Text>
+                      <Text style={styles.detailCaseMissing}>Cover unavailable</Text>
+                    </View>
+                  )}
+                </Animated.View>
+                <View style={styles.detailHeroInfo}>
+                  <Text style={styles.detailTitle}>{game.title}</Text>
+                  <Text style={styles.subheading}>{game.platform}</Text>
+                  <Text style={styles.detailStatus}>
+                    {source === 'collection' ? '✓ In Collection'
+                      : source === 'wishlist' ? '♡ On Wishlist' : 'Discover'}
                   </Text>
-                )
+                  {hasMetadata(game.genre) && (
+                    <Text style={styles.subheading}>{game.genre}</Text>
+                  )}
+                  {hasMetadata(game.releaseDate) && (
+                    <Text style={styles.subheading}>Released {game.releaseDate}</Text>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.detailDivider} />
+              <Text style={styles.detailSectionTitle}>About this game</Text>
+              <Text style={styles.detailBody}>
+                {hasMetadata(game.description)
+                  ? game.description : 'Description unavailable.'}
+              </Text>
+
+              {info.length > 0 && (
+                <View style={styles.detailInfoGrid}>
+                  {info.map(([label, value]) => (
+                    <View key={label} style={styles.detailInfoCell}>
+                      <Text style={styles.detailInfoLabel}>{label}</Text>
+                      <Text style={styles.detailInfoValue}>{String(value)}</Text>
+                    </View>
+                  ))}
+                </View>
               )}
 
-              {source === 'collection' && (
+              <View style={styles.detailDivider} />
+              <Text style={styles.detailSectionTitle}>Ratings</Text>
+              <View style={styles.detailRatingsRow}>
+                <View style={styles.detailRatingCard}>
+                  <Text style={styles.detailRatingValue}>
+                    {score(game.metacriticScore, '/100')}
+                  </Text>
+                  <Text style={styles.detailRatingLabel}>Metacritic</Text>
+                </View>
+                <View style={styles.detailRatingCard}>
+                  <Text style={styles.detailRatingValue}>
+                    {score(game.userScore, '/10')}
+                  </Text>
+                  <Text style={styles.detailRatingLabel}>User Score</Text>
+                </View>
+              </View>
+              {(!Number.isFinite(game.metacriticScore) ||
+                !Number.isFinite(game.userScore)) && (
+                <Text style={styles.detailInfoLabel}>
+                  Missing scores will appear when metadata is available.
+                </Text>
+              )}
+
+              {source === 'collection' ? (
                 <>
-                  <Text style={styles.subheading}>
-                    Ownership: {game.owned === true ? 'Owned' :
-                      game.owned === false ? 'Not owned' : 'Unavailable'}
-                  </Text>
-                  <Text style={[
-                    styles.subheading,
-                    { alignSelf: 'flex-start', marginTop: 12 },
-                  ]}>
-                    Notes
-                  </Text>
-                  <TextInput
-                    multiline
-                    value={notes}
-                    onChangeText={setNotes}
-                    placeholder="Add notes about this game..."
-                    placeholderTextColor="#888"
-                    style={[styles.input, styles.notesInput]}
-                    scrollEnabled
-                    textAlignVertical="top"
-                    returnKeyType="done"
-                    blurOnSubmit
-                    onFocus={() => {
-                      setTimeout(() => {
-                        scrollRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
-                    }}
-                    onSubmitEditing={Keyboard.dismiss}
-                  />
-                  <Button onPress={() => {
+                  <View style={styles.detailDivider} />
+                  <View style={styles.detailCollectionHeading}>
+                    <Text style={styles.detailSectionTitle}>My Collection</Text>
+                    <Text style={styles.detailStatus}>
+                      {game.owned === true ? 'Owned'
+                        : game.owned === false ? 'Not owned' : 'Status unavailable'}
+                    </Text>
+                  </View>
+                  <Text style={styles.detailFieldTitle}>Personal Notes</Text>
+                  <View onLayout={event => {
+                    notesPosition.current = event.nativeEvent.layout.y;
+                  }}>
+                    <TextInput
+                      multiline
+                      value={notes}
+                      onChangeText={setNotes}
+                      placeholder="Add notes about this game..."
+                      placeholderTextColor="#888"
+                      style={[styles.input, styles.notesInput]}
+                      scrollEnabled
+                      textAlignVertical="top"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onFocus={() => {
+                        setTimeout(() => {
+                          scrollRef.current?.scrollTo({
+                            y: Math.max(0, notesPosition.current - 100),
+                            animated: true,
+                          });
+                        }, 300);
+                      }}
+                      onSubmitEditing={Keyboard.dismiss}
+                    />
+                  </View>
+                  <Button selected onPress={() => {
                     Keyboard.dismiss();
                     onSave(game.id, notes);
                     onClose();
-                  }}>
-                    Save notes
-                  </Button>
+                  }}>Save Notes</Button>
 
-                  <Text style={[
-                    styles.subheading,
-                    { alignSelf: 'flex-start', marginTop: 12 },
-                  ]}>
-                    Add to another shelf
+                  <Text style={[styles.detailFieldTitle, { marginTop: 18 }]}>
+                    Manage Shelves
                   </Text>
                   <ScrollView
                     horizontal
@@ -520,25 +569,29 @@ function GameDetail({
                         key={s.id}
                         onPress={() => onAddToShelf(game.id, s.id)}
                         style={{ marginRight: 7 }}
-                      >
-                        {s.name}
-                      </Button>
+                      >{s.name}</Button>
                     ))}
                   </ScrollView>
                 </>
-              )}
-
-              {source !== 'collection' && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {source === 'discover' ? (
-                    <Button selected onPress={onAddToWishlist}>Add to Wishlist</Button>
-                  ) : (
-                    <Button onPress={onRemoveFromWishlist}>Remove from Wishlist</Button>
-                  )}
-                  <Button onPress={onAddToCollection}>
-                    {source === 'wishlist' ? 'Move to Collection' : 'Add to Collection'}
-                  </Button>
-                </View>
+              ) : (
+                <>
+                  <View style={styles.detailDivider} />
+                  <View style={styles.detailActions}>
+                    {source === 'discover' ? (
+                      <Button selected onPress={onAddToWishlist}>
+                        ♡ Add to Wishlist
+                      </Button>
+                    ) : (
+                      <Button onPress={onRemoveFromWishlist}>
+                        Remove from Wishlist
+                      </Button>
+                    )}
+                    <Button onPress={onAddToCollection}>
+                      {source === 'wishlist'
+                        ? 'Move to Collection' : '+ Add to Collection'}
+                    </Button>
+                  </View>
+                </>
               )}
             </View>
           </ScrollView>
@@ -1479,6 +1532,60 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  detailTopBar: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 14,
+  },
+  detailEyebrow: {
+    color: '#c4b2ff', fontSize: 10, fontWeight: '800',
+    letterSpacing: 1, flexShrink: 1,
+  },
+  detailClose: { padding: 6 },
+  detailCloseText: { color: C.text, fontSize: 26 },
+  detailHero: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+  detailHeroCase: {
+    width: 112, height: 158, marginBottom: 0, alignSelf: 'flex-start',
+  },
+  detailHeroInfo: { flex: 1, paddingTop: 3 },
+  detailCasePlatform: { color: '#fff', fontWeight: 'bold', fontSize: 10 },
+  detailCaseFallback: {
+    flex: 1, justifyContent: 'center', padding: 7,
+  },
+  detailCaseTitle: {
+    color: '#fff', fontWeight: '900', textAlign: 'center', fontSize: 13,
+  },
+  detailCaseMissing: {
+    color: C.muted, textAlign: 'center', fontSize: 9, marginTop: 9,
+  },
+  detailStatus: { color: '#9ddbbb', fontSize: 12, marginBottom: 7 },
+  detailDivider: {
+    height: 1, backgroundColor: C.line, marginVertical: 18,
+  },
+  detailSectionTitle: {
+    color: C.text, fontSize: 17, fontWeight: '800', marginBottom: 10,
+  },
+  detailBody: { color: '#d2d2de', fontSize: 14, lineHeight: 21 },
+  detailInfoGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', marginTop: 14, rowGap: 14,
+  },
+  detailInfoCell: { width: '50%', paddingRight: 10 },
+  detailInfoLabel: { color: '#9999ad', fontSize: 11, marginBottom: 4 },
+  detailInfoValue: { color: C.text, fontSize: 13, lineHeight: 18 },
+  detailRatingsRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  detailRatingCard: {
+    flex: 1, backgroundColor: '#292b3a', padding: 14,
+    borderRadius: 11, alignItems: 'center',
+  },
+  detailRatingValue: { color: C.text, fontSize: 22, fontWeight: '800' },
+  detailRatingLabel: { color: C.muted, fontSize: 11, marginTop: 4 },
+  detailCollectionHeading: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', flexWrap: 'wrap',
+  },
+  detailFieldTitle: {
+    color: '#d2d2de', fontWeight: '700', fontSize: 13, marginTop: 6,
+  },
+  detailActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   addModal: {
     width: '100%',
     backgroundColor: '#22232d',
