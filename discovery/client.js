@@ -63,8 +63,22 @@ const queryPath = (path, params) => {
   return `${path}?${pairs.join('&')}`;
 };
 
-const list = (filters, page = 1, refresh = false) =>
-  request(queryPath('/games', { ...filters, page }), hour, refresh);
+async function list(filters, page = 1, refresh = false) {
+  const result = await request(queryPath('/games', { ...filters, page }), hour, refresh);
+  const results = await Promise.all(result.data.results.map(async game => {
+    const details = await cache.get('/games/' + game.providerId);
+    return details?.data.explicitContent ? { ...game, explicitContent: true } : game;
+  }));
+  return { ...result, data: { ...result.data, results } };
+}
+
+export const artworkPath = (title, platform) =>
+  queryPath('/artwork', { title, platform });
+
+export const artworkCache = {
+  get: async path => (await cache.get(path))?.data,
+  resolve: async path => (await request(path, 24 * hour, false)).data,
+};
 
 export const rawg = {
   list,

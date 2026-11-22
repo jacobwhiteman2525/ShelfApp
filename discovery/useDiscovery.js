@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { rawg } from './client';
 import { mergePages } from './model';
+import { permitsGame } from './contentPolicy';
 
 const empty = { games: [], page: 0, hasMore: false, cached: false };
 
@@ -27,15 +28,35 @@ export function useDiscovery(filters) {
     current.busy = true;
     setState(old => ({ ...old, key: current.key, loading: true, error: null }));
     try {
-      const { search, ...filters } = current.filters;
-      const result = search ? await rawg.search(search, filters, page, refresh)
-        : await rawg.list(filters, page, refresh);
+      const { search, intent, ...filters } = current.filters;
+      let games = [];
+      let lastPage = page;
+      let hasMore = false;
+      let cached = false;
+      let warning;
+      for (let offset = 0; offset < 3; offset += 1) {
+        let result;
+        try {
+          result = await rawg.list({ search, intent, ...filters }, page + offset, refresh);
+        } catch (error) {
+          if (!offset) throw error;
+          warning = error.message;
+          break;
+        }
+        if (session.current !== current) return;
+        lastPage = page + offset;
+        games = mergePages(games, result.data.results.filter(game => permitsGame(game, search, intent)));
+        hasMore = result.data.hasMore;
+        cached ||= Boolean(result.cached);
+        warning ||= result.warning;
+        if (!hasMore || games.length >= 20 || warning) break;
+      }
       if (session.current !== current) return;
       setState(old => ({
-        key: current.key, page, hasMore: result.data.hasMore,
-        games: mergePages(page === 1 ? [] : old.games, result.data.results),
-        cached: Boolean(result.cached || (page > 1 && old.cached)),
-        warning: result.warning || (page > 1 ? old.warning : null),
+        key: current.key, page: lastPage, hasMore,
+        games: mergePages(page === 1 ? [] : old.games, games),
+        cached: Boolean(cached || (page > 1 && old.cached)),
+        warning: warning || (page > 1 ? old.warning : null),
       }));
     } catch (error) {
       if (session.current === current) {

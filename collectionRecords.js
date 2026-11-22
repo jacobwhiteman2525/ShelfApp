@@ -15,7 +15,7 @@ function readSavedRecords(collection, wishlist, seed) {
 }
 
 function savedGame(game) {
-  const { platforms, availablePlatforms, ...record } = game;
+  const { platforms, availablePlatforms, discoveryIntent, ...record } = game;
   return record;
 }
 

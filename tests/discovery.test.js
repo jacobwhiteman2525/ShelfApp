@@ -8,6 +8,8 @@ const { gameQuery } = require('../discovery/queries');
 const { createCache, CACHE_KEY } = require('../discovery/cache');
 const { readSavedRecords, collectGame } = require('../collectionRecords');
 const { createProxy } = require('../server/rawg-proxy');
+const { classifyExplicit, discoveryIntent, permitsGame } = require('../discovery/contentPolicy');
+const { createCoverLookup, selectFrontCover } = require('../server/cover-art');
 
 const switchPlatform = { id: 7, name: 'Nintendo Switch' };
 const pcPlatform = { id: 4, name: 'PC' };
@@ -27,7 +29,7 @@ test('normalizes optional provider data and never exposes HTML markup as rich te
   assert.deepEqual(game, {
     provider: 'rawg', providerId: 100, title: 'Player’s Game',
     platforms: [switchPlatform, pcPlatform],
-    coverUrl: fixture.background_image, description: 'Play & explore 🎮', releaseDate: '2025-01-01',
+    backgroundImageUrl: fixture.background_image, description: 'Play & explore 🎮', releaseDate: '2025-01-01',
     genre: 'Adventure', developer: 'Developer', publisher: 'Publisher', contentRating: 'Teen',
     metacriticScore: 82, rawgRating: 4.25, rawgRatingsCount: 12,
   });
@@ -42,7 +44,8 @@ test('prefers the plain description and omits absent ratings and TBA dates', () 
   assert.equal(game.rawgRating, undefined);
   assert.equal(game.metacriticScore, undefined);
   assert.equal(game.releaseDate, undefined);
-  assert.equal(game.coverUrl, undefined);
+  assert.equal(game.backgroundImageUrl, undefined);
+  assert.equal(game.coverArtUrl, undefined);
   assert.equal(normalizeGame({}), null);
 });
 
@@ -173,4 +176,97 @@ test('proxy authenticates, allowlists upstream calls, hides credentials and forw
   assert.ok(!(await limited.text()).includes(key));
   assert.equal((await get('/games')).status, 429);
   assert.equal(hits.length, 4);
+});
+
+const explicit = { ...fixture, id: 101, name: 'Fixture After Hours', tags: [{ slug: 'hentai' }] };
+const mainstream = { ...fixture, esrb_rating: { slug: 'mature' }, tags: [{ slug: 'romance' }] };
+
+test('distinguishes explicit metadata from ordinary mature themes and scopes intentional lookup', () => {
+  assert.equal(classifyExplicit(explicit), true);
+  assert.equal(classifyExplicit(mainstream), false);
+  assert.equal(classifyExplicit({ esrb_rating: { slug: 'adults-only' }, genres: [{ name: 'Action' }] }), false);
+  assert.equal(classifyExplicit({ description_raw: 'Contains graphic sexual scenes.' }), true);
+  const game = normalizeGame(explicit);
+  assert.equal(discoveryIntent('adult romance'), 'safe');
+  assert.equal(permitsGame(game, explicit.name, discoveryIntent(explicit.name)), false);
+  assert.equal(permitsGame(game, explicit.name, discoveryIntent(explicit.name, true)), true);
+  assert.equal(permitsGame(game, 'Other Game', 'exact'), false);
+  assert.equal(permitsGame(game, 'hentai games', discoveryIntent('hentai games')), true);
+  assert.equal(permitsGame(game, 'adult romance', 'explicit'), false);
+  const entry = { ...game, id: 'saved', platform: 'PC', notes: 'keep' };
+  const library = { games: [entry], shelves: [] };
+  const restored = readSavedRecords(JSON.stringify(library), JSON.stringify([entry]), () => assert.fail());
+  assert.deepEqual(restored.library.games, [entry]);
+  assert.deepEqual(restored.wishlist, [entry]);
+});
+
+test('proxy filters all browsing orders and pages while keeping exact-title lookups separate', async t => {
+  const token = 'test-content-development-token';
+  const server = createProxy({
+    key: 'fixture', token,
+    fetchUpstream: async url => {
+      assert.equal(url.searchParams.has('intent'), false);
+      if (url.searchParams.get('search') === explicit.name) {
+        assert.equal(url.searchParams.get('search_exact'), 'true');
+      }
+      return Response.json({ results: [explicit, mainstream], next: 'fixture-next' });
+    },
+  });
+  t.after(() => server.close());
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const get = async path => (await fetch(base + path, { headers: { Authorization: 'Bearer ' + token } })).json();
+  for (const query of [
+    'ordering=-added', 'ordering=-rating', 'ordering=-metacritic', 'platforms=7',
+    'ordering=-released&dates=2024-01-01,2025-01-01', 'ordering=released&dates=2025-01-01,2026-01-01',
+    'search=ordinary', 'search=romance&intent=explicit', 'page=2&intent=safe',
+  ]) {
+    const page = await get('/games?' + query);
+    assert.deepEqual(page.results.map(item => item.providerId), [100]);
+    assert.equal(page.hasMore, true);
+  }
+  const exact = await get('/games?intent=exact&search=' + encodeURIComponent(explicit.name));
+  assert.deepEqual(exact.results.map(item => [item.providerId, item.explicitContent]), [[101, true]]);
+  const category = await get('/games?intent=explicit&search=hentai');
+  assert.equal(category.results[0].explicitContent, true);
+  const disk = new Map();
+  const cache = createCache({ getItem: key => disk.get(key), setItem: (key, value) => disk.set(key, value) });
+  await cache.put('intent=safe&page=1', await get('/games?intent=safe'), 500);
+  await cache.put('intent=exact&page=1', exact, 500);
+  assert.deepEqual((await cache.get('intent=safe&page=1')).data.results.map(item => item.providerId), [100]);
+});
+
+test('cover lookup requires an unambiguous title and platform, and returns only front art', async () => {
+  const result = {
+    data: { games: [{ id: 15, game_title: fixture.name, platform: 9 }] },
+    include: { boxart: {
+      base_url: { original: 'https://cdn.thegamesdb.net/images/original/' },
+      data: { 15: [
+        { type: 'boxart', side: 'back', filename: 'boxart/back/15.jpg' },
+        { type: 'boxart', side: 'front', filename: 'boxart/front/15.jpg' },
+      ] },
+    } },
+  };
+  assert.deepEqual(selectFrontCover(result, fixture.name, 10), {});
+  assert.deepEqual(selectFrontCover({ ...result, pages: { next: 'more' } }, fixture.name, 9), {});
+  assert.deepEqual(selectFrontCover({
+    ...result, data: { games: [...result.data.games, { ...result.data.games[0], id: 16 }] },
+  }, fixture.name, 9), {});
+  const urls = [];
+  const lookup = createCoverLookup({
+    key: 'fixture-cover-key', fetchArtwork: async url => {
+      urls.push(url);
+      return Response.json(url.pathname.endsWith('/Platforms')
+        ? { data: { platforms: { 9: { id: 9, name: 'Sony Playstation 4' } } } } : result);
+    },
+  });
+  const cover = await lookup(fixture.name, 'PlayStation 4');
+  assert.deepEqual(cover, {
+    coverArtUrl: 'https://cdn.thegamesdb.net/images/original/boxart/front/15.jpg',
+    coverArtSource: 'thegamesdb',
+  });
+  assert.equal(urls[1].searchParams.get('filter[platform]'), '9');
+  assert.ok(!JSON.stringify(cover).includes('fixture-cover-key'));
+  assert.equal(await createCoverLookup({})(fixture.name, 'PlayStation 4'), null);
 });

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Animated, Image, Keyboard, KeyboardAvoidingView, Modal, Platform,
+  Alert, Animated, Keyboard, KeyboardAvoidingView, Modal, Platform,
   Pressable, SafeAreaView, ScrollView, StatusBar,
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -10,6 +10,8 @@ import DiscoverScreen, { RawgAttribution } from './discovery/DiscoverScreen';
 import { MetadataLink, useRawgDetails } from './discovery/detail';
 import { fillMetadata, linkMetadata, sameGame, selectPlatform } from './discovery/model';
 import { collectGame, readSavedRecords, savedGame } from './collectionRecords';
+import GameArtwork, { CoverAttribution } from './discovery/GameArtwork';
+import GameDescription from './discovery/GameDescription';
 
 const STORE_KEY = 'shelfvault.expo.library.v1';
 const WISHLIST_KEY = 'shelfvault.expo.wishlist.v1';
@@ -244,9 +246,8 @@ function Shelf({
 
 function GameDetail({
   game, source, onClose, onSave, onAddToShelf, shelves,
-  onAddToWishlist, onRemoveFromWishlist, onAddToCollection, onLink,
+  onAddToWishlist, onRemoveFromWishlist, onAddToCollection, onLink, onExplicitDetected,
 }) {
-  const [failedCover, setFailedCover] = useState(null);
   const slide = useRef(new Animated.Value(0)).current;
   const [notes, setNotes] = useState(game.notes || '');
   const scrollRef = useRef(null);
@@ -257,6 +258,11 @@ function GameDetail({
   const option = options.find(item => item.id === platformId);
   game = fillMetadata(game, details.data);
   if (option) game = selectPlatform(game, option);
+  const restricted = source === 'discover' && (game.discoveryIntent || 'safe') === 'safe' && game.explicitContent;
+  const providerId = game.providerId;
+  useEffect(() => {
+    if (restricted) onExplicitDetected(providerId);
+  }, [restricted, providerId, onExplicitDetected]);
 
   useEffect(() => {
     Animated.spring(slide, {
@@ -297,6 +303,7 @@ function GameDetail({
     onClose();
   };
 
+  if (restricted) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={requestClose}>
       <KeyboardAvoidingView
@@ -336,10 +343,8 @@ function GameDetail({
 
               <View style={styles.detailHero}>
                 <Animated.View style={[
-                  styles.case,
                   styles.detailHeroCase,
                   {
-                    borderColor: platformColor(game.platform),
                     transform: [
                       {
                         translateY: slide.interpolate({
@@ -354,30 +359,8 @@ function GameDetail({
                     ],
                   },
                 ]}>
-                  <View style={{
-                    backgroundColor: platformColor(game.platform),
-                    padding: 6,
-                  }}>
-                    <Text style={styles.detailCasePlatform} numberOfLines={1}>
-                      {game.platform || (options.length ? 'Multiple platforms' : 'Platform unavailable')}
-                    </Text>
-                  </View>
-                  {game.coverUrl && failedCover !== game.coverUrl ? (
-                    <Image
-                      source={{ uri: game.coverUrl }}
-                      style={{ flex: 1, width: '100%' }}
-                      resizeMode="contain"
-                      accessibilityLabel={'Artwork for ' + game.title}
-                      onError={() => setFailedCover(game.coverUrl)}
-                    />
-                  ) : (
-                    <View style={styles.detailCaseFallback}>
-                      <Text style={styles.detailCaseTitle} numberOfLines={5}>
-                        {game.title}
-                      </Text>
-                      <Text style={styles.detailCaseMissing}>Artwork unavailable</Text>
-                    </View>
-                  )}
+                  <GameArtwork game={game} resolve={source !== 'discover' || !details.loading}
+                    style={{ width: '100%', borderColor: platformColor(game.platform) }} />
                 </Animated.View>
                 <View style={styles.detailHeroInfo}>
                   <Text style={styles.detailTitle}>{game.title}</Text>
@@ -388,6 +371,7 @@ function GameDetail({
                     {source === 'collection' ? '✓ In Collection'
                       : source === 'wishlist' ? '♡ On Wishlist' : 'Discover'}
                   </Text>
+                  {game.explicitContent && <Text style={styles.subheading}>Explicit sexual content</Text>}
                   {hasMetadata(game.genre) && (
                     <Text style={styles.subheading}>{game.genre}</Text>
                   )}
@@ -398,10 +382,11 @@ function GameDetail({
               </View>
 
               <View style={styles.detailDivider} />
+              <CoverAttribution />
               {game.provider === 'rawg' ? (
                 <>
                   <RawgAttribution />
-                  {!!game.coverUrl && <Text style={styles.detailInfoLabel}>
+                  {!!(game.backgroundImageUrl || game.coverUrl) && <Text style={styles.detailInfoLabel}>
                     RAWG artwork may be promotional imagery.
                   </Text>}
                   {details.loading && <Text style={styles.subheading}>Loading game metadata…</Text>}
@@ -415,10 +400,8 @@ function GameDetail({
               ) : onLink && <MetadataLink game={game} Button={Button}
                 textStyle={styles.subheading} onLink={onLink} />}
               <Text style={styles.detailSectionTitle}>About this game</Text>
-              <Text style={styles.detailBody}>
-                {hasMetadata(game.description)
-                  ? game.description : 'Description unavailable.'}
-              </Text>
+              <GameDescription style={styles.detailBody}
+                description={hasMetadata(game.description) ? game.description : 'Description unavailable.'} />
 
               {info.length > 0 && (
                 <View style={styles.detailInfoGrid}>
@@ -569,21 +552,9 @@ function GameDetail({
 }
 
 function GameRow({ game, onPress, summary }) {
-  const [failedCover, setFailedCover] = useState(null);
   return (
     <Pressable accessibilityRole="button" style={styles.gameRow} onPress={onPress}>
-      <View style={[
-        styles.gameCover,
-        { borderColor: platformColor(game.platform) },
-      ]}>
-        {game.coverUrl && failedCover !== game.coverUrl ? (
-          <Image
-            source={{ uri: game.coverUrl }}
-            style={{ width: '100%', height: '100%', borderRadius: 4 }}
-            onError={() => setFailedCover(game.coverUrl)}
-          />
-        ) : <Text style={{ color: '#fff', fontSize: 20 }}>▣</Text>}
-      </View>
+      <GameArtwork game={game} compact style={{ width: 46, borderColor: platformColor(game.platform) }} />
       <View style={{ flex: 1, gap: 5 }}>
         <Text style={{ color: C.text, fontWeight: '700' }}>
           {game.title}
@@ -592,6 +563,7 @@ function GameRow({ game, onPress, summary }) {
           {game.platform || (game.availablePlatforms?.length ? 'Multiple platforms' : 'Platform unavailable')}
         </Text>
         {!!summary && <Text style={styles.subheading}>{summary}</Text>}
+        {game.explicitContent && <Text style={styles.subheading}>Explicit sexual content</Text>}
       </View>
     </Pressable>
   );
@@ -606,6 +578,7 @@ export default function App() {
 
   const [tab, setTab] = useState('collection');
   const [visitedDiscover, setVisitedDiscover] = useState(false);
+  const [classifiedIds, setClassifiedIds] = useState(() => new Set());
   const [view, setView] = useState('shelf');
   const [detail, setDetail] = useState(null);
   const [moving, setMoving] = useState(null);
@@ -793,6 +766,7 @@ export default function App() {
       {tab === 'collection' && (
         <>
           {library.games.some(game => game.provider === 'rawg') && <RawgAttribution />}
+          {view !== 'shelf' && <CoverAttribution />}
           <View style={styles.tabs}>
             {['shelf', 'grid', 'list'].map(v => (
               <Button
@@ -886,13 +860,14 @@ export default function App() {
                         style={view === 'grid'
                           ? styles.gridCard : styles.listCard}
                       >
-                        <View style={{
-                          width: 5,
-                          backgroundColor: platformColor(g.platform),
-                          marginRight: 9,
+                        <GameArtwork game={g} compact style={{
+                          width: view === 'grid' ? 48 : 32,
+                          borderColor: platformColor(g.platform),
+                          alignSelf: view === 'grid' ? 'center' : 'flex-start',
+                          marginRight: view === 'grid' ? 0 : 9,
                         }} />
                         <Text
-                          style={{ color: '#fff', flex: 1 }}
+                          style={view === 'grid' ? styles.gridGameTitle : styles.listGameTitle}
                           numberOfLines={view === 'grid' ? 3 : 1}
                         >
                           {g.title}
@@ -918,6 +893,7 @@ export default function App() {
       {tab === 'wishlist' && (
         <View style={{ flex: 1 }}>
           {wishlist.some(game => game.provider === 'rawg') && <RawgAttribution />}
+          <CoverAttribution />
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>♡ Wishlist</Text>
             <Text style={styles.subheading}>
@@ -965,6 +941,7 @@ export default function App() {
             Button={Button}
             GameRow={GameRow}
             tracked={[...library.games, ...wishlist]}
+            classifiedIds={classifiedIds}
             onOpen={openDetail}
             onManualAdd={() => {
               Keyboard.dismiss();
@@ -1012,6 +989,10 @@ export default function App() {
           key={detail.source + ':' + (detailGame.id || detailGame.providerId)}
           source={detail.source}
           game={detailGame}
+          onExplicitDetected={id => {
+            setClassifiedIds(old => new Set([...old, id]));
+            setDetail(null);
+          }}
           shelves={library.shelves}
           onClose={() => setDetail(null)}
           onSave={(id, notes) =>
@@ -1253,10 +1234,12 @@ const styles = StyleSheet.create({
     width: '31%',
     minHeight: 130,
     backgroundColor: C.panel,
-    flexDirection: 'row',
+    gap: 6,
     padding: 8,
     borderRadius: 7,
   },
+  gridGameTitle: { color: '#fff', textAlign: 'center' },
+  listGameTitle: { color: '#fff', flex: 1 },
   listCard: {
     flexDirection: 'row',
     backgroundColor: C.panel,
@@ -1307,15 +1290,6 @@ const styles = StyleSheet.create({
     marginBottom: 9,
     alignItems: 'center',
   },
-  gameCover: {
-    width: 65,
-    height: 88,
-    backgroundColor: '#303141',
-    borderWidth: 3,
-    borderRadius: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1355,16 +1329,6 @@ const styles = StyleSheet.create({
     padding: 17,
     width: '100%',
   },
-  case: {
-    height: 220,
-    width: 158,
-    backgroundColor: '#302e3c',
-    borderWidth: 4,
-    borderRadius: 8,
-    overflow: 'hidden',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
   detailTitle: {
     fontSize: 21,
     color: '#fff',
@@ -1401,23 +1365,11 @@ const styles = StyleSheet.create({
     color: '#c4b2ff', fontSize: 10, fontWeight: '800',
     letterSpacing: 1, flexShrink: 1,
   },
-  detailClose: { padding: 6 },
+  detailClose: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   detailCloseText: { color: C.text, fontSize: 26 },
   detailHero: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
-  detailHeroCase: {
-    width: 112, height: 158, marginBottom: 0, alignSelf: 'flex-start',
-  },
-  detailHeroInfo: { flex: 1, paddingTop: 3 },
-  detailCasePlatform: { color: '#fff', fontWeight: 'bold', fontSize: 10 },
-  detailCaseFallback: {
-    flex: 1, justifyContent: 'center', padding: 7,
-  },
-  detailCaseTitle: {
-    color: '#fff', fontWeight: '900', textAlign: 'center', fontSize: 13,
-  },
-  detailCaseMissing: {
-    color: C.muted, textAlign: 'center', fontSize: 9, marginTop: 9,
-  },
+  detailHeroCase: { width: '48%', alignSelf: 'flex-start' },
+  detailHeroInfo: { flex: 1, minWidth: 0, paddingTop: 3 },
   detailStatus: { color: '#9ddbbb', fontSize: 12, marginBottom: 7 },
   detailDivider: {
     height: 1, backgroundColor: C.line, marginVertical: 18,

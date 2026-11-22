@@ -4,6 +4,8 @@ import {
   TextInput, View,
 } from 'react-native';
 import { availablePlatforms } from './model';
+import { discoveryIntent, permitsGame } from './contentPolicy';
+import { CoverAttribution } from './GameArtwork';
 import { gameQuery, SECTIONS, SORTS } from './queries';
 import { useDebouncedSearch, useDiscovery, usePlatforms } from './useDiscovery';
 
@@ -15,24 +17,29 @@ export function RawgAttribution() {
   );
 }
 
-export default function DiscoverScreen({ Button, GameRow, tracked, onOpen, onManualAdd }) {
+export default function DiscoverScreen({ Button, GameRow, tracked, classifiedIds, onOpen, onManualAdd }) {
   const [input, setInput] = useState('');
+  const [exact, setExact] = useState(false);
   const [platform, setPlatform] = useState(null);
   const [showPlatforms, setShowPlatforms] = useState(false);
   const [section, setSection] = useState('popular');
   const [sort, setSort] = useState('popular');
   const search = useDebouncedSearch(input.trim());
   const typing = input.trim() !== search;
-  const filters = gameQuery({ section, sort, search, platform: platform?.id });
+  const intent = discoveryIntent(search, exact);
+  const filters = { ...gameQuery({ section, sort, search, platform: platform?.id }), intent };
   const results = useDiscovery(typing ? null : filters);
   const platforms = usePlatforms();
   const rows = typing ? [] : results.games.flatMap(game => {
+    if (classifiedIds.has(game.providerId)) game = { ...game, explicitContent: true };
+    if (!permitsGame(game, search, intent)) return [];
     if (section === 'upcoming' && !game.releaseDate) return [];
     const eligible = availablePlatforms(game, tracked)
       .filter(option => !platform || option.id === platform.id);
     if ((game.platforms.length || platform) && !eligible.length) return [];
     return [{
       ...game, availablePlatforms: eligible,
+      discoveryIntent: intent,
       platform: eligible.length === 1 ? eligible[0].name : undefined,
     }];
   });
@@ -46,17 +53,17 @@ export default function DiscoverScreen({ Button, GameRow, tracked, onOpen, onMan
         <TextInput
           accessibilityLabel="Search games"
           value={input}
-          onChangeText={setInput}
+          onChangeText={value => { setExact(false); setInput(value); }}
           maxLength={120}
           placeholder="Search games"
           placeholderTextColor="#b7b5c6"
           returnKeyType="search"
           style={styles.input}
         />
-        {!!input && <Button onPress={() => setInput('')}>Clear</Button>}
+        {!!input && <Button onPress={() => { setExact(false); setInput(''); }}>Clear</Button>}
       </View>
       <FlatList
-        key={JSON.stringify([section, sort, search, platform?.id])}
+        key={JSON.stringify([section, sort, search, platform?.id, intent])}
         data={rows}
         keyExtractor={game => String(game.providerId)}
         keyboardShouldPersistTaps="handled"
@@ -69,6 +76,11 @@ export default function DiscoverScreen({ Button, GameRow, tracked, onOpen, onMan
         }}
         ListHeaderComponent={
           <View style={styles.controls}>
+            {!!input.trim() && (
+              <Button selected={exact} onPress={() => { Keyboard.dismiss(); setExact(value => !value); }}>
+                Search exact title
+              </Button>
+            )}
             <ScrollView horizontal keyboardShouldPersistTaps="handled" contentContainerStyle={styles.row}>
               {SECTIONS.map(([id, label]) => (
                 <Button key={id} selected={section === id} onPress={() => {
@@ -112,6 +124,7 @@ export default function DiscoverScreen({ Button, GameRow, tracked, onOpen, onMan
               </>
             )}
             <RawgAttribution />
+            <CoverAttribution />
             <Text style={styles.muted}>Artwork may be promotional imagery.</Text>
             {section === 'upcoming' && (
               <Text style={styles.muted}>Dated releases in the next 12 months. TBA releases are excluded.</Text>

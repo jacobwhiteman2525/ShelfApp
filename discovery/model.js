@@ -1,3 +1,5 @@
+const { classifyExplicit } = require('./contentPolicy');
+
 /** @typedef {{id: number, name: string}} GamePlatform */
 /**
  * @typedef {Object} GameMetadata
@@ -7,7 +9,9 @@
  * @property {GamePlatform[]} platforms
  * @property {number} [platformId]
  * @property {string} [platform]
- * @property {string} [coverUrl]
+ * @property {string} [coverArtUrl]
+ * @property {string} [backgroundImageUrl]
+ * @property {boolean} [explicitContent]
  * @property {string} [description]
  * @property {string} [releaseDate]
  * @property {string} [genre]
@@ -91,7 +95,7 @@ function normalizeGame(value) {
   };
   const cover = string(value.background_image);
   const fields = {
-    coverUrl: /^https:\/\/media\.rawg\.io\//i.test(cover) ? cover : '',
+    backgroundImageUrl: /^https:\/\/media\.rawg\.io\//i.test(cover) ? cover : '',
     description: plainDescription(value.description_raw, value.description),
     releaseDate: /^\d{4}-\d{2}-\d{2}$/.test(value.released) && !value.tba ? value.released : '',
     genre: names(value.genres),
@@ -99,6 +103,7 @@ function normalizeGame(value) {
     publisher: names(value.publishers),
     contentRating: string(value.esrb_rating?.name),
   };
+  if (classifyExplicit(value)) game.explicitContent = true;
   for (const [key, field] of Object.entries(fields)) {
     if (field) game[key] = field;
   }
@@ -115,7 +120,7 @@ function normalizeGame(value) {
 }
 
 const metadataFields = [
-  'coverUrl', 'description', 'releaseDate', 'genre', 'developer', 'publisher',
+  'coverArtUrl', 'backgroundImageUrl', 'explicitContent', 'description', 'releaseDate', 'genre', 'developer', 'publisher',
   'contentRating', 'metacriticScore', 'rawgRating', 'rawgRatingsCount',
 ];
 

@@ -1,4 +1,4 @@
-const CACHE_KEY = 'shelfvault.expo.rawg-cache.v1';
+const CACHE_KEY = 'shelfvault.expo.rawg-cache.v2';
 const MAX_AGE = 14 * 24 * 60 * 60 * 1000;
 
 function createCache(storage, { maxEntries = 100, maxChars = 500_000, now = Date.now } = {}) {
