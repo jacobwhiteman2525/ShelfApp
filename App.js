@@ -11,6 +11,7 @@ import { MetadataLink, useRawgDetails } from './discovery/detail';
 import { fillMetadata, sameGame, selectPlatform } from './discovery/model';
 import { collectGame, enrichSavedGame, linkSavedGame, readSavedRecords, savedGame } from './collectionRecords';
 import GameArtwork, { CoverAttribution } from './discovery/GameArtwork';
+import { ArtworkViewport } from './discovery/ArtworkViewport';
 import GameDescription from './discovery/GameDescription';
 
 const STORE_KEY = 'shelfvault.expo.library.v1';
@@ -844,7 +845,7 @@ export default function App() {
               ))}
             </ScrollView>
           ) : (
-            <ScrollView
+            <ArtworkViewport
               style={{ flex: 1 }}
               contentContainerStyle={{ padding: 12 }}
             >
@@ -887,7 +888,7 @@ export default function App() {
                   </View>
                 </View>
               ))}
-            </ScrollView>
+            </ArtworkViewport>
           )}
         </>
       )}
@@ -903,7 +904,7 @@ export default function App() {
             </Text>
           </View>
 
-          <ScrollView
+          <ArtworkViewport
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: 12, paddingBottom: 20 }}
           >
@@ -933,13 +934,14 @@ export default function App() {
                 />
               ))
             )}
-          </ScrollView>
+          </ArtworkViewport>
         </View>
       )}
 
       {visitedDiscover && (
         <View style={{ flex: 1, display: tab === 'discover' ? 'flex' : 'none' }}>
           <DiscoverScreen
+            active={tab === 'discover'}
             Button={Button}
             GameRow={GameRow}
             tracked={[...library.games, ...wishlist]}

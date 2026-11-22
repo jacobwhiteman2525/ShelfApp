@@ -1,9 +1,9 @@
 const CACHE_KEY = 'shelfvault.expo.rawg-cache.v2';
 const MAX_AGE = 14 * 24 * 60 * 60 * 1000;
 
-function createCache(storage, { maxEntries = 100, maxChars = 500_000, now = Date.now } = {}) {
+function createCache(storage, { maxEntries = 100, maxChars = 500_000, now = Date.now, key: cacheKey = CACHE_KEY } = {}) {
   let queue = Promise.resolve();
-  const loaded = Promise.resolve().then(() => storage.getItem(CACHE_KEY)).then(raw => {
+  const loaded = Promise.resolve().then(() => storage.getItem(cacheKey)).then(raw => {
     const parsed = JSON.parse(raw || '[]');
     return new Map(Array.isArray(parsed) ? parsed : []);
   }).catch(() => new Map());
@@ -30,7 +30,7 @@ function createCache(storage, { maxEntries = 100, maxChars = 500_000, now = Date
           entries.delete(entries.keys().next().value);
           packed = JSON.stringify([...entries]);
         }
-        await storage.setItem(CACHE_KEY, packed);
+        await storage.setItem(cacheKey, packed);
       }).catch(() => {});
       return queue;
     },

@@ -6,6 +6,7 @@ import {
 import { availablePlatforms } from './model';
 import { discoveryIntent, permitsGame } from './contentPolicy';
 import { CoverAttribution } from './GameArtwork';
+import { ArtworkViewport } from './ArtworkViewport';
 import { gameQuery, SECTIONS, SORTS } from './queries';
 import { useDebouncedSearch, useDiscovery, usePlatforms } from './useDiscovery';
 
@@ -17,7 +18,7 @@ export function RawgAttribution({ compact = false }) {
   );
 }
 
-export default function DiscoverScreen({ Button, GameRow, tracked, classifiedIds, onOpen, onManualAdd }) {
+export default function DiscoverScreen({ Button, GameRow, tracked, classifiedIds, onOpen, onManualAdd, active }) {
   const [input, setInput] = useState('');
   const [exact, setExact] = useState(false);
   const [platform, setPlatform] = useState(null);
@@ -62,7 +63,9 @@ export default function DiscoverScreen({ Button, GameRow, tracked, classifiedIds
         />
         {!!input && <Button onPress={() => { setExact(false); setInput(''); }}>Clear</Button>}
       </View>
-      <FlatList
+      <ArtworkViewport
+        component={FlatList}
+        active={active}
         key={JSON.stringify([section, sort, search, platform?.id, intent])}
         data={rows}
         keyExtractor={game => String(game.providerId)}

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createCache } from './cache';
+import { createArtworkStore } from './artworkStore';
 
 const baseUrl = process.env.EXPO_PUBLIC_RAWG_PROXY_URL?.replace(/\/$/, '');
 const token = process.env.EXPO_PUBLIC_RAWG_PROXY_TOKEN;
@@ -39,21 +40,21 @@ async function fetchProxy(path) {
   }
 }
 
-function request(path, ttl, refresh, storageKey = path) {
-  if (pending.has(storageKey)) return pending.get(storageKey);
+function request(path, ttl, refresh) {
+  if (pending.has(path)) return pending.get(path);
   const job = (async () => {
-    const cached = await cache.get(storageKey);
+    const cached = await cache.get(path);
     if (!refresh && cached?.expires > Date.now()) return { data: cached.data, cached: true };
     try {
       const data = await fetchProxy(path);
-      await cache.put(storageKey, data, ttl);
+      await cache.put(path, data, ttl);
       return { data };
     } catch (error) {
       if (!cached) throw error;
       return { data: cached.data, cached: true, warning: error.message };
     }
-  })().finally(() => pending.delete(storageKey));
-  pending.set(storageKey, job);
+  })().finally(() => pending.delete(path));
+  pending.set(path, job);
   return job;
 }
 
@@ -75,12 +76,27 @@ async function list(filters, page = 1, refresh = false) {
 export const artworkPath = (title, platform) =>
   queryPath('/artwork', { title, platform });
 
-const coverCacheKey = path => 'physical-front:' + path;
-
-export const artworkCache = {
-  get: async path => (await cache.get(coverCacheKey(path)))?.data,
-  resolve: async path => (await request(path, 24 * hour, false, coverCacheKey(path))).data,
-};
+export const artworkCache = createArtworkStore(createCache(AsyncStorage, {
+  key: 'shelfvault.expo.front-covers.v2', maxEntries: 250,
+}), async path => {
+  if (!baseUrl || !token) return { status: 'provider_not_configured' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch(baseUrl + path, {
+      headers: { Authorization: 'Bearer ' + token }, signal: controller.signal,
+    });
+    const result = await response.json();
+    if (result?.status) return result;
+    if (response.status === 429) return {
+      status: 'rate_limited', providerStatus: response.status,
+      retryAfterMs: Number(response.headers.get('Retry-After')) * 1000,
+    };
+    return { status: 'provider_failed', providerStatus: response.status };
+  } finally {
+    clearTimeout(timer);
+  }
+});
 
 export const rawg = {
   list,

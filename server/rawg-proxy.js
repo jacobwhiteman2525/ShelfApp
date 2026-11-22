@@ -87,7 +87,12 @@ function createProxy({ key, token, fetchUpstream = fetch, coverKey, fetchArtwork
     try {
       if (endpoint.artwork) {
         const artwork = await coverLookup(endpoint.title, endpoint.platform);
-        return artwork ? send(200, artwork) : send(404, { error: 'Cover lookup unavailable' });
+        const status = {
+          provider_not_configured: 503, provider_denied: 503, provider_failed: 502, rate_limited: 429,
+        }[artwork.status] || 200;
+        const headers = artwork.retryAfterMs
+          ? { 'Retry-After': String(Math.ceil(artwork.retryAfterMs / 1000)) } : {};
+        return send(status, artwork, headers);
       }
       const upstream = new URL('https://api.rawg.io/api' + endpoint.pathname);
       upstream.search = endpoint.params.toString();

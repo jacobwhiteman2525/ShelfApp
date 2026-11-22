@@ -12,6 +12,7 @@ const { createProxy } = require('../server/rawg-proxy');
 const { classifyExplicit, discoveryIntent, permitsGame } = require('../discovery/contentPolicy');
 const { createCoverLookup, selectFrontCover } = require('../server/cover-art');
 const { coverLookupTitle, fitsPortraitSlot, frontCoverUrl } = require('../discovery/coverPolicy');
+const { createArtworkStore } = require('../discovery/artworkStore');
 
 const switchPlatform = { id: 7, name: 'Nintendo Switch' };
 const pcPlatform = { id: 4, name: 'PC' };
@@ -313,11 +314,11 @@ test('cover lookup requires an unambiguous title and platform, and returns only 
       ] },
     } },
   };
-  assert.deepEqual(selectFrontCover(result, fixture.name, 10), {});
-  assert.deepEqual(selectFrontCover({ ...result, pages: { next: 'more' } }, fixture.name, 9), {});
+  assert.equal(selectFrontCover(result, fixture.name, 10).status, 'platform_mismatch');
+  assert.equal(selectFrontCover({ ...result, pages: { next: 'more' } }, fixture.name, 9).status, 'ambiguous_match');
   assert.deepEqual(selectFrontCover({
     ...result, data: { games: [...result.data.games, { ...result.data.games[0], id: 16 }] },
-  }, fixture.name, 9), {});
+  }, fixture.name, 9), { status: 'ambiguous_match' });
   const urls = [];
   const lookup = createCoverLookup({
     key: 'fixture-cover-key', fetchArtwork: async url => {
@@ -331,14 +332,15 @@ test('cover lookup requires an unambiguous title and platform, and returns only 
     coverArtUrl: 'https://cdn.thegamesdb.net/images/original/boxart/front/15.jpg',
     coverArtSource: 'thegamesdb', coverArtKind: 'physical-front',
     coverArtTitle: fixture.name, coverArtPlatform: 'PlayStation 4',
+    status: 'resolved', providerGameId: 15, providerPlatformId: 9, providerStatus: 200,
   });
   assert.equal(frontCoverUrl(cover, fixture.name, 'Nintendo Switch'), undefined);
   assert.equal(urls[1].searchParams.get('filter[platform]'), '9');
   assert.ok(!JSON.stringify(cover).includes('fixture-cover-key'));
-  assert.equal(await createCoverLookup({})(fixture.name, 'PlayStation 4'), null);
+  assert.equal((await createCoverLookup({})(fixture.name, 'PlayStation 4')).status, 'provider_not_configured');
 });
 
-test('physical slots reject promotional, legacy, unverified, and landscape images', () => {
+test('physical slots reject promotional, legacy, and unverified assets and contain genuine wide fronts', () => {
   const title = 'Banjo-Kazooie';
   const platform = 'Nintendo 64';
   const rawgImage = 'https://media.rawg.io/media/screenshot.jpg';
@@ -354,7 +356,8 @@ test('physical slots reject promotional, legacy, unverified, and landscape image
     title, platform), undefined);
   assert.equal(frontCoverUrl(cover, title, 'Xbox 360'), undefined);
   assert.equal(frontCoverUrl(cover, title, platform), cover.coverArtUrl);
-  assert.equal(fitsPortraitSlot({ width: 1600, height: 900 }), false);
+  assert.equal(fitsPortraitSlot({ width: 1600, height: 900 }), true);
+  assert.equal(fitsPortraitSlot({ width: 1600, height: 100 }), false);
   assert.equal(fitsPortraitSlot({ width: 600, height: 600 }), true);
   assert.equal(fitsPortraitSlot({ width: 600, height: 900 }), true);
   assert.equal(fitsPortraitSlot({ width: 0, height: 900 }), false);
@@ -371,9 +374,98 @@ test('TheGamesDB cover lookup rejects screenshots and indistinguishable regional
       data: { 100: [{ side: 'front', type: 'screenshot', filename: 'boxart/front/fixture.jpg' }] },
     } },
   };
-  assert.deepEqual(selectFrontCover(payload, title, 7, 'Nintendo Switch'), {});
+  assert.equal(selectFrontCover(payload, title, 7, 'Nintendo Switch').status, 'no_front_cover');
   payload.include.boxart.data[100][0].type = 'boxart';
   assert.equal(selectFrontCover(payload, title, 7, 'Nintendo Switch').coverArtPlatform, 'Nintendo Switch');
   payload.data.games.push({ ...row, id: 101, region_id: 2 });
-  assert.deepEqual(selectFrontCover(payload, title, 7, 'Nintendo Switch'), {});
+  assert.equal(selectFrontCover(payload, title, 7, 'Nintendo Switch').status, 'ambiguous_match');
+});
+
+test('cover matching keeps editions, ports and compilations distinct and allows known alternate titles', () => {
+  const rows = [
+    [1, 'Tomb Raider', 9, ['Tomb Raider: Definitive Edition']],
+    [2, 'TOMB RAIDER – Definitive Edition', 9, []],
+    [3, 'Astral Chain', 7, []],
+    [4, 'Astro Bot', 12, []],
+    [5, 'Grand Theft Auto V', 9, []],
+    [6, 'Grand Theft Auto V', 12, []],
+    [7, 'Banjo Kazooie', 3, []],
+    [8, 'Pikmin 2', 7, ['Pikmin 1+2']],
+    [9, 'The Witcher 3: Wild Hunt Complete Edition', 9, ['The Witcher 3: Wild Hunt']],
+  ];
+  const payload = {
+    data: { games: rows.map(([id, game_title, platform, alternates]) => ({ id, game_title, platform, alternates })) },
+    include: { boxart: {
+      base_url: { original: 'https://cdn.thegamesdb.net/images/original' },
+      data: Object.fromEntries(rows.map(([id]) => [id,
+        [{ type: 'boxart', side: 'front', filename: `boxart/front/${id}.jpg` }]])),
+    } },
+  };
+  for (const [title, platformId, platform, gameId] of [
+    ['Tomb Raider: Definitive Edition', 9, 'PlayStation 4', 2],
+    ['Astral Chain', 7, 'Nintendo Switch', 3],
+    ['Astro Bot', 12, 'PlayStation 5', 4],
+    ['GTA 5', 9, 'PlayStation 4', 5],
+    ['Grand Theft Auto V', 12, 'PlayStation 5', 6],
+    ['Banjo-Kazooie', 3, 'Nintendo 64', 7],
+  ]) {
+    const cover = selectFrontCover(payload, title, platformId, platform);
+    assert.equal(cover.providerGameId, gameId);
+    assert.ok(frontCoverUrl(cover, title, platform));
+  }
+  assert.equal(selectFrontCover(payload, 'Pikmin 1+2', 7, 'Nintendo Switch').status, 'no_matching_game');
+  assert.equal(selectFrontCover(payload, 'The Witcher 3: Wild Hunt', 9, 'PlayStation 4').status, 'no_matching_game');
+  payload.include.boxart.base_url.original = 'https://untrusted.example/images/original/';
+  assert.equal(selectFrontCover(payload, 'Astro Bot', 12, 'PlayStation 5').status, 'image_url_rejected');
+});
+
+test('provider failures and exhausted quota are reported separately from missing covers', async () => {
+  let calls = 0;
+  const quota = createCoverLookup({
+    key: 'fixture', fetchArtwork: async () => {
+      calls++;
+      return Response.json({ remaining_monthly_allowance: 0 }, { status: 403 });
+    },
+  });
+  assert.equal((await quota('Astral Chain', 'Switch')).status, 'rate_limited');
+  assert.equal((await quota('Astro Bot', 'PS5')).providerStatus, 403);
+  assert.equal(calls, 1);
+  const denied = createCoverLookup({
+    key: 'fixture', fetchArtwork: async () => Response.json({}, { status: 403 }),
+  });
+  assert.equal((await denied('Astral Chain', 'Nintendo Switch')).status, 'provider_denied');
+});
+
+test('cover cache shares requests, expires misses, rejects old URLs, and recovers after provider configuration changes', async () => {
+  let time = 0;
+  let calls = 0;
+  const disk = new Map();
+  const cache = createCache({ getItem: key => disk.get(key), setItem: (key, value) => disk.set(key, value) }, {
+    now: () => time, key: 'covers',
+  });
+  const title = 'Astral Chain';
+  const platform = 'Nintendo Switch';
+  const good = {
+    status: 'resolved', coverArtKind: 'physical-front', coverArtSource: 'thegamesdb',
+    coverArtTitle: title, coverArtPlatform: platform,
+    coverArtUrl: 'https://cdn.thegamesdb.net/images/original/boxart/front/1.jpg',
+  };
+  let response = { status: 'no_front_cover' };
+  const store = createArtworkStore(cache, async () => { calls++; return response; }, { now: () => time, spacing: 0 });
+  await cache.put('physical-front:v2:art', { ...good, coverArtUrl: 'https://media.rawg.io/screen.jpg' }, 500);
+  assert.equal(await store.cached('art', title, platform), null);
+  const first = store.resolve('art', title, platform);
+  assert.equal(store.resolve('art', title, platform), first);
+  assert.equal((await first).status, 'no_front_cover');
+  assert.equal((await store.resolve('art', title, platform)).cachedNegative, true);
+  assert.equal(calls, 1);
+  time += 300_001;
+  response = { status: 'provider_not_configured', retryAfterMs: 2000 };
+  assert.equal((await store.resolve('art', title, platform)).status, 'provider_not_configured');
+  response = good;
+  assert.equal((await store.resolve('art', title, platform)).status, 'provider_not_configured');
+  time += 2001;
+  assert.equal((await store.resolve('art', title, platform)).coverArtUrl, good.coverArtUrl);
+  assert.equal((await store.cached('art', title, platform)).data.coverArtUrl, good.coverArtUrl);
+  assert.equal(calls, 3);
 });
